@@ -568,12 +568,10 @@ function processAIPhoto(input) {
 
   var file = input.files[0];
   input.value = "";
-  // Restauration de la compression à 1024px et 0.7 de qualité
-  compressImage(file, 1024, 0.7, function(dataUrl) {
-    var prompt = "Analyse ce document. Extrais toutes les actions ou tâches à réaliser sous forme d'une liste JSON. " +
-                 "Renvoie UNIQUEMENT un objet JSON strict : " +
-                 "{ \"tasks\": [ { \"name\": \"Titre clair\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": nombre_1_à_5 } ], " +
-                 "\"suggestedFolder\": \"Assurance, Maison, Santé, Voiture, Administratif ou vide\" }.";
+  // Compression à 800px : un bon compromis entre légèreté (vitesse) et lisibilité
+  compressImage(file, 800, 0.65, function(dataUrl) {
+    var prompt = "Lis ce document et renvoie UNIQUEMENT un JSON strict au format : " +
+                 "{\"tasks\": [{\"name\": \"Titre de la tâche\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
 
     fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
