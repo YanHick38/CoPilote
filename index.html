@@ -568,10 +568,11 @@ function processAIPhoto(input) {
 
   var file = input.files[0];
   input.value = "";
-  // Compression à 800px : un bon compromis entre légèreté (vitesse) et lisibilité
+  
   compressImage(file, 800, 0.65, function(dataUrl) {
-    var prompt = "Lis ce document et renvoie UNIQUEMENT un JSON strict au format : " +
-                 "{\"tasks\": [{\"name\": \"Titre de la tâche\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
+    var prompt = "Analyse ce document et génère UNE SEULE tâche claire et synthétique sous la forme d'une action directe (ex: 'Payer [Nom]', 'Signer [Nom]', 'Faire [Sujet]') avec sa date limite si présente. " +
+                 "Renvoie UNIQUEMENT un JSON strict au format : " +
+                 "{\"tasks\": [{\"name\": \"Action et Nom court\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
 
     fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -587,16 +588,17 @@ function processAIPhoto(input) {
       if (loader) loader.style.display = "none";
       try {
         var res = JSON.parse(data.choices[0].message.content.replace(/```json|```/g, "").trim());
-        var addedCount = 0, summaryText = "";
-        (res.tasks || [res]).forEach(function(tData) {
-          var newTask = aiTask(tData);
+        var taskList = res.tasks || [res];
+        if (taskList.length > 0) {
+          // On ne garde strictement que la première tâche pour n'en créer qu'une seule
+          var newTask = aiTask(taskList[0]);
           S.tasks.unshift(newTask);
           wT(newTask);
-          addedCount++;
-          summaryText += "\n• " + newTask.name + (newTask.due ? " (" + fmtFR(newTask.due) + ")" : "");
-        });
-        alert("✨ " + addedCount + " tâche(s) extraite(s) :" + summaryText);
-        render();
+          alert("✨ Tâche extraite :\n• " + newTask.name + (newTask.due ? " (" + fmtFR(newTask.due) + ")" : ""));
+          render();
+        } else {
+          alert("Aucune tâche trouvée sur ce document.");
+        }
       } catch(e) { alert("L'analyse a échoué."); }
     })
     .catch(function(err) {
@@ -605,7 +607,6 @@ function processAIPhoto(input) {
     });
   });
 }
-
 function icsEsc(t) { return String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
 function fold(l) {
   var out = [], cur = "", n = 0, enc = new TextEncoder();
