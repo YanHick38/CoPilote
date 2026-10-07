@@ -582,7 +582,7 @@ function processAIPhoto(input) {
         "X-Title": "CoPilote"
       },
       body: JSON.stringify({
-        model: "google/gemini-flash-1.5",
+        model: "google/gemini-flash-1.5:free",
         messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
         temperature: 0.1
       })
