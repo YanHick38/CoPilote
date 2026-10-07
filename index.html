@@ -579,7 +579,7 @@ function processAIPhoto(input) {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
       body: JSON.stringify({
-        model: "openrouter/free",
+        model: "google/gemini-flash-1.5-8b:free",
         messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
         temperature: 0.1
       })
