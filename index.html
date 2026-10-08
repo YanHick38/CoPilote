@@ -35,7 +35,8 @@ nav button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weig
 .row:first-child{border-top:0}
 .row .t{flex:1;min-width:0}
 .t p{margin:0;font-weight:600}.t small{color:var(--mut);font-size:12px}
-.chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--mut);background:none;cursor:pointer;flex:none;padding:0;color:#fff;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+.chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--mut);background:none;cursor:pointer;flex:none;padding:0;color:#fff;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:transform 0.2s}
+.chk:active{transform:scale(1.2)}
 .chk.d{background:var(--ok);border-color:var(--ok)}
 .done p{text-decoration:line-through;color:var(--mut)}
 .pill{font-size:12px;background:var(--soft);color:var(--acc);font-weight:600;border-radius:8px;padding:2px 9px;white-space:nowrap}
@@ -59,6 +60,11 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 .ai-loader{display:none;align-items:center;gap:8px;font-size:13px;color:#6366F1;font-weight:600;margin-top:10px}
 .spinner{width:16px;height:16px;border:2px solid #6366F1;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Style des badges et confettis */
+.badge-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.badge-tag { font-size: 11px; background: var(--soft); color: var(--acc); padding: 2px 6px; border-radius: 6px; font-weight: 600; }
+.confetti { position: fixed; width: 10px; height: 10px; background-color: #f00; z-index: 9999; animation: fall 1s ease-out forwards; }
+@keyframes fall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(150px) rotate(360deg); opacity: 0; } }
 .fr-overlay{position:fixed;inset:0;background:#101917;color:#E6F1EE;z-index:100;padding:24px;overflow-y:auto}
 .fr-overlay h1{font-size:32px;margin:0 0 2px}.fr-overlay .sub{color:var(--mut);font-size:16px;margin:0 0 20px}
 .fr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
@@ -180,7 +186,6 @@ function getFoyerId() {
 }
 
 var FID = getFoyerId(), K = "copilote-v2-" + FID;
-// Ajout de la fréquence "tous_2_jours" (équivalent à environ 2.5 fois par semaine)
 var F = { quotidien: 5, tous_2_jours: 2.5, hebdo: 1, mensuel: 0.5, annuel: 0.25, ponctuel: 0.25 }, CAP = 25;
 var uid = function() { return Math.random().toString(36).slice(2, 8); };
 
@@ -325,7 +330,7 @@ function isDone(t) {
 function items(p) {
   var r = range(p), today = sod(new Date()), out = [];
   S.tasks.forEach(function(t) {
-    if (t.who === "none") return; // Ignore les tâches non attribuées du tableau de bord
+    if (t.who === "none") return;
     if (t.freq === "quotidien" || t.freq === "tous_2_jours" || t.freq === "hebdo") { out.push({ t: t, k: "rec" }); return; }
     if (!t.due) { if (p === "mois") out.push({ t: t, k: "nodate" }); return; }
     var d = parse(t.due);
@@ -357,6 +362,24 @@ function who(t, dt) {
   return M[(weekIdx(dt) + tours.indexOf(t)) % M.length];
 }
 
+function mpts(memberId) {
+  var s = 0;
+  S.log.forEach(function(e) {
+    var b = wkBounds(0);
+    if (e.d >= b[0] && e.d <= b[1] && e.by === memberId) s += e.w;
+  });
+  return s;
+}
+
+function getBadges(memberId) {
+  var p = mpts(memberId);
+  var badges = [];
+  if (p >= 5) badges.push("🔥 Actif");
+  if (p >= 15) badges.push("⭐ Champion");
+  if (p >= 25) badges.push("🏆 Légende");
+  return badges;
+}
+
 function pct(m) {
   var s = 0;
   S.tasks.forEach(function(t) { var a = who(t); if (a && a.id === m.id) s += t.w * F[t.freq]; });
@@ -378,7 +401,14 @@ function whoSel(t) {
 function freqLabels() {
   return { quotidien: "Quotidien", tous_2_jours: "Tous les 2 jours", hebdo: "Hebdomadaire", mensuel: "Mensuel", annuel: "Annuel", ponctuel: "Ponctuel" };
 }
-function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g" data-a="goto" data-id="' + m.id + '" ondragover="event.preventDefault(); this.classList.add(\'drag-over\')" ondragleave="this.classList.remove(\'drag-over\')" ondrop="dropOnMember(event, \'' + m.id + '\')" style="cursor:pointer" aria-label="Voir les tâches de ' + esc(m.name) + '">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
+function gauges() { 
+  return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + 
+    S.members.map(function(m) { 
+      var badges = getBadges(m.id);
+      var badgeHTML = badges.length ? '<div class="badge-list">' + badges.map(function(b){ return '<span class="badge-tag">' + b + '</span>'; }).join("") + '</div>' : '';
+      return '<div class="g" data-a="goto" data-id="' + m.id + '" ondragover="event.preventDefault(); this.classList.add(\'drag-over\')" ondragleave="this.classList.remove(\'drag-over\')" ondrop="dropOnMember(event, \'' + m.id + '\')" style="cursor:pointer; padding-bottom:8px;" aria-label="Voir les tâches de ' + esc(m.name) + '">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b>' + badgeHTML + '</div>'; 
+    }).join("") + '</div>'; 
+}
 
 function dayDiff(d) { return Math.round((d - sod(new Date())) / 864e5); }
 function urg(x) {
@@ -392,7 +422,7 @@ function urg(x) {
 var OR = { late: 0, due: 1, rec: 2, nodate: 3 };
 function byUrg(a, b) { return OR[a.k] - OR[b.k] || (a.d && b.d ? a.d - b.d : 0); }
 
-function mpts(m) { var s = 0; S.tasks.forEach(function(t) { var a = who(t); if (a && a.id === m.id) s += t.w * F[t.freq]; }); return s; }
+function mpts(m) { var s = 0; S.tasks.forEach(function(t) { var a = who(t); if (a && a.id === (m.id || m)) s += t.w * F[t.freq]; }); return s; }
 function cap(m) { return m.cap || CAP; }
 function pc(r) { return Math.round(r * 100); }
 function sugFor(w, fq) {
@@ -441,7 +471,7 @@ function aiTask(res) {
 function alertCard() {
   var l = [], t = [];
   items("sem").forEach(function(x) { var u = urg(x); if (u === "late") l.push(x); else if (u === "today") t.push(x); });
-  if (!l.length && !t.length) return '<div class="card al ok"><b>Tout est à jour pour aujourd’hui.</b></div>';
+  if (!l.length && !t.length) return '<div class="card al ok"><b>Tout est à jour pour aujourd’hui. 🎉</b></div>';
   var all = l.concat(t), h = '<div class="card al' + (l.length ? " bad" : "") + '"><b>À ne pas oublier</b> <span class="mut">' + (l.length ? l.length + " en retard, " : "") + t.length + " pour aujourd’hui</span>";
   all.slice(0, 5).forEach(function(x) {
     var a = who(x.t, x.d);
@@ -466,14 +496,14 @@ function vTb() {
     h += '</div>';
   }
 
-  h += '<div class="card"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Avancement</span><b>' + dn + " sur " + tot + '</b></div><div class="bar"><i style="width:' + (tot ? Math.round(dn / tot * 100) : 0) + '%"></i></div></div>';
+  h += '<div class="card"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Avancement de l’équipe</span><b>' + dn + " sur " + tot + '</b></div><div class="bar"><i style="width:' + (tot ? Math.round(dn / tot * 100) : 0) + '%"></i></div></div>';
   S.members.forEach(function(m) {
     var l = its.filter(function(x) { var a = who(x.t, x.d); return a && a.id === m.id; }).sort(byUrg);
     h += '<div class="card" id="mb-' + m.id + '"><b style="display:block;font-size:17px;margin-bottom:4px">' + esc(m.name) + '</b>';
     if (!l.length) h += '<p class="mut" style="margin:0">Rien de prévu sur cette période.</p>';
     l.forEach(function(x) {
       var d = isDone(x.t), u = urg(x);
-      h += '<div class="row' + (d ? " done" : "") + (u ? " u-" + u : "") + '" draggable="true" ondragstart="event.dataTransfer.setData(\'text/plain\', \'' + x.t.id + '\')"><button class="chk' + (d ? " d" : "") + '" data-a="chk" data-id="' + x.t.id + '" aria-label="Marquer comme fait">' + (d ? "✓" : "") + '</button><div class="t"><p>' + esc(x.t.name) + '</p><small class="' + (x.k === "late" && !d ? "lt" : "") + '">' + lbl(x) + '</small></div></div>';
+      h += '<div class="row' + (d ? " done" : "") + (u ? " u-" + u : "") + '" draggable="true" ondragstart="event.dataTransfer.setData(\'text/plain\', \'' + x.t.id + '\')"><button class="chk' + (d ? " d" : "") + '" data-a="chk" data-id="' + x.t.id + '" aria-label="Marquer comme fait" onclick="triggerConfetti(event)">' + (d ? "✓" : "") + '</button><div class="t"><p>' + esc(x.t.name) + '</p><small class="' + (x.k === "late" && !d ? "lt" : "") + '">' + lbl(x) + '</small></div></div>';
     });
     h += '</div>';
   });
@@ -487,6 +517,26 @@ function vTach() {
     h += '<div class="ed" draggable="true" ondragstart="event.dataTransfer.setData(\'text/task-idx\', \'' + index + '\')" ondragover="event.preventDefault()" ondrop="dropOnTask(event, ' + index + ')"><input data-c="tn" data-id="' + t.id + '" value="' + esc(t.name) + '"><select data-c="tf" data-id="' + t.id + '">' + Object.keys(F).map(function(k) { return opt(k, lb[k] || k, t.freq); }).join("") + '</select><select data-c="tw" data-id="' + t.id + '">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, String(t.w)); }).join("") + '</select><select data-c="tq" data-id="' + t.id + '">' + whoSel(t) + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance <input type="date" data-c="td" data-id="' + t.id + '" value="' + (t.due || "") + '"></label><div style="grid-column:1/-1;display:flex;justify-content:space-between"><button class="lk" style="color:var(--acc)" data-a="ict" data-id="' + t.id + '">📅 Ajouter à l’agenda</button><button class="lk" data-a="dt" data-id="' + t.id + '">Supprimer</button></div></div>';
   });
   return h + '</div>';
+}
+
+function triggerConfetti(e) {
+  var rect = e.target.getBoundingClientRect();
+  var x = rect.left + rect.width / 2;
+  var y = rect.top + rect.height / 2;
+  var colors = ["#1F8A70", "#2E9E6B", "#D98A1F", "#6366F1", "#EC4899"];
+  for (var i = 0; i < 15; i++) {
+    var c = document.createElement("div");
+    c.className = "confetti";
+    c.style.left = x + "px";
+    c.style.top = y + "px";
+    c.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    var angle = Math.random() * Math.PI * 2;
+    var speed = 30 + Math.random() * 50;
+    c.style.setProperty("--tx", Math.cos(angle) * speed + "px");
+    c.style.setProperty("--ty", Math.sin(angle) * speed + "px");
+    document.body.appendChild(c);
+    setTimeout(function(el) { el.remove(); }, 1000, c);
+  }
 }
 
 var shot = null, shotCat = "";
@@ -578,16 +628,16 @@ function bilMsg(s) {
   var rs = S.members.map(function(m) { return { m: m, r: s.st[m.id].p / cap(m) }; }).sort(function(a, b) { return b.r - a.r; });
   if (rs.length < 2) return "";
   var hi = rs[0], lo = rs[rs.length - 1];
-  if (hi.r - lo.r < 0.25) return "La charge est bien répartie.";
-  return esc(hi.m.name) + " a porté " + pc(hi.r) + " % de sa capacité, contre " + pc(lo.r) + " % pour " + esc(lo.m.name) + ".";
+  if (hi.r - lo.r < 0.25) return "La charge est bien répartie. Bravo à tous ! 🌟";
+  return esc(hi.m.name) + " a assuré comme une bête cette semaine (" + pc(hi.r) + " %) !";
 }
 function sunCard() {
   if (new Date().getDay() !== 0) return "";
-  return '<div class="card al ok"><b>Bilan de la semaine prêt</b><p class="mut" style="margin:4px 0 8px">Voyez qui a porté quoi.</p><button class="btn" data-a="tab" data-v="bil">Voir le bilan</button></div>';
+  return '<div class="card al ok"><b>Bilan de la semaine prêt 🏆</b><p class="mut" style="margin:4px 0 8px">Venez découvrir les trophées de la semaine.</p><button class="btn" data-a="tab" data-v="bil">Voir le bilan</button></div>';
 }
 function histCard() {
   var wk = [-3, -2, -1, 0].map(wkStats);
-  var h = '<div class="card"><b>Historique (4 semaines)</b><p class="mut" style="margin:4px 0 0">Part de capacité utilisée.</p>';
+  var h = '<div class="card"><b>Historique (4 semaines)</b><p class="mut" style="margin:4px 0 0">Progression globale.</p>';
   S.members.forEach(function(m) {
     h += '<div style="margin-top:12px"><span style="font-size:14px;font-weight:600">' + esc(m.name) + '</span><div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px">';
     wk.forEach(function(w) {
@@ -616,7 +666,7 @@ function vBil() {
 function vFam() {
   var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre foyer.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
   h += '<div class="card"><b>Rappels agenda</b><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
-  h += '<div class="card"><b>Membres</b>';
+  h += '<div class="card"><b>Membres & Badges</b>';
   S.members.forEach(function(m) {
     h += '<div class="row"><input data-c="mn" data-id="' + m.id + '" value="' + esc(m.name) + '" style="flex:1;min-width:0"><input data-c="mc" data-id="' + m.id + '" type="number" min="1" max="100" value="' + cap(m) + '" style="width:64px;flex:none"><button class="lk" data-a="dm" data-id="' + m.id + '">Supprimer</button></div>';
   });
@@ -628,7 +678,7 @@ function render() {
   var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
   var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
   var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
-  var banner = '<div class="sync-banner"><span><b>CoPilote AI</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
+  var banner = '<div class="sync-banner"><span><b>CoPilote AI 🎮</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
   document.getElementById("app").innerHTML = banner + '<nav>' + T.map(function(x) { return '<button class="' + (V === x[0] ? "on" : "") + '" data-a="tab" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</nav>' + b;
 }
 
