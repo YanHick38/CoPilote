@@ -67,7 +67,6 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<!-- AJOUTER CETTE LIGNE -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
 <body>
@@ -285,16 +284,20 @@ function editing() {
 function refresh() { if (editing()) { pend = true; return; } render(); }
 document.addEventListener("focusout", function() { setTimeout(function() { if (pend && !editing()) { pend = false; render(); } }, 80); });
 
-if (db) {
-  db.ref(".info/connected").on("value", function(s) { online = s.val() === true; refresh(); });
-  ref().on("value", function(s) {
-    var v = s.val();
-    if (!v || !v.meta) { ref().set(toDB(S)).catch(fail); return; }
-    if (v.apiKey !== undefined) ref("apiKey").remove().catch(function() {});
-    err = ""; S = fromDB(v); keep();
-    if (!v.folders) S.folders.forEach(function(f) { wF(f); });
-    refresh();
-  }, fail);
+if (db && auth) {
+  auth.onAuthStateChanged(function(user) {
+    if (user) {
+      db.ref(".info/connected").on("value", function(s) { online = s.val() === true; refresh(); });
+      ref().on("value", function(s) {
+        var v = s.val();
+        if (!v || !v.meta) { ref().set(toDB(S)).catch(fail); return; }
+        if (v.apiKey !== undefined) ref("apiKey").remove().catch(function() {});
+        err = ""; S = fromDB(v); keep();
+        if (!v.folders) S.folders.forEach(function(f) { wF(f); });
+        refresh();
+      }, fail);
+    }
+  });
 }
 
 var V = "tb", P = "sem";
