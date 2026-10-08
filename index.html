@@ -236,6 +236,7 @@ function norm(x) {
   x.members.forEach(function(m, i) { if (m.o === undefined) m.o = i; });
   x.tasks.forEach(function(t, i) { if (t.o === undefined) t.o = i; if (t.c === undefined) t.c = i; if (t.due === undefined) t.due = ""; });
   if (!x.vault) x.vault = [];
+  if (!x.log) x.log = [];
   delete x.apiKey;
   if (!x.folders || !x.folders.length) x.folders = defaultFolders();
   x.members.forEach(function(m) { if (!m.cap) m.cap = /enfant/i.test(m.name) ? 10 : 25; });
@@ -259,12 +260,15 @@ function wV(v) { keep(); if (db) ref("vault/" + v.id).set(clean(v)).catch(fail);
 function dV(id) { keep(); if (db) ref("vault/" + id).remove().catch(fail); }
 function wF(f) { keep(); if (db) ref("folders/" + f.id).set(clean(f)).catch(fail); }
 function dF(id) { keep(); if (db) ref("folders/" + id).remove().catch(fail); }
+function wLg(e) { keep(); if (db) ref("log/" + e.id).set(clean(e)).catch(fail); }
+function dLg(id) { keep(); if (db) ref("log/" + id).remove().catch(fail); }
 
 function toDB(x) {
-  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, folders: {} };
+  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, folders: {}, log: {} };
   x.members.forEach(function(m) { o.members[m.id] = clean(m); });
   x.tasks.forEach(function(t) { o.tasks[t.id] = clean(t); });
   (x.vault || []).forEach(function(v) { o.vault[v.id] = clean(v); });
+  (x.log || []).forEach(function(e) { o.log[e.id] = clean(e); });
   (x.folders || []).forEach(function(f) { o.folders[f.id] = clean(f); });
   return o;
 }
@@ -273,7 +277,7 @@ function fromDB(v) {
   function arr(o) {
     return Object.keys(o || {}).map(function(k) { var e = o[k]; if (!e.id) e.id = k; return e; }).sort(function(a, b) { return (a.o || 0) - (b.o || 0); });
   }
-  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), folders: arr(v.folders) });
+  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), folders: arr(v.folders), log: arr(v.log) });
 }
 
 function editing() {
@@ -447,7 +451,7 @@ function alertCard() {
 function vTb() {
   var its = items(P), tot = its.length, dn = its.filter(function(x) { return isDone(x.t); }).length;
   var h = '<div style="display:flex;gap:6px;margin-bottom:12px"><button class="seg' + (P === "sem" ? " on" : "") + '" data-a="per" data-v="sem">Cette semaine</button><button class="seg' + (P === "mois" ? " on" : "") + '" data-a="per" data-v="mois">Ce mois-ci</button></div>';
-  h += alertCard() + gauges() + sugCard();
+  h += alertCard() + sunCard() + gauges() + sugCard();
   h += '<div class="card"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Avancement</span><b>' + dn + " sur " + tot + '</b></div><div class="bar"><i style="width:' + (tot ? Math.round(dn / tot * 100) : 0) + '%"></i></div></div>';
   S.members.forEach(function(m) {
     var l = its.filter(function(x) { var a = who(x.t, x.d); return a && a.id === m.id; }).sort(byUrg);
@@ -534,6 +538,67 @@ function vVault() {
   return h;
 }
 
+// ---- Bilan hebdomadaire : ce qui a réellement été fait, par personne ----
+var BW = 0;
+function logTick(t, on) {
+  var d = iso(sod(new Date())), id = t.id + "_" + d, i = -1;
+  S.log.forEach(function(e, k) { if (e.id === id) i = k; });
+  if (on) {
+    var a = who(t); if (!a) return;
+    var e = { id: id, tid: t.id, n: t.name, w: t.w, by: a.id, d: d };
+    if (i < 0) S.log.push(e); else S.log[i] = e;
+    wLg(e);
+    var lim = iso(addD(sod(new Date()), -75));
+    S.log = S.log.filter(function(x) { if (x.d < lim) { dLg(x.id); return false; } return true; });
+  } else if (i >= 0) { S.log.splice(i, 1); dLg(id); }
+}
+function wkBounds(off) { var a = addD(range("sem")[0], 7 * off); return [iso(a), iso(addD(a, 6))]; }
+function wkStats(off) {
+  var b = wkBounds(off), st = {}, tot = 0;
+  S.members.forEach(function(m) { st[m.id] = { m: m, p: 0, l: [] }; });
+  S.log.forEach(function(e) { if (e.d >= b[0] && e.d <= b[1] && st[e.by]) { st[e.by].p += e.w; st[e.by].l.push(e); tot += e.w; } });
+  return { b: b, st: st, tot: tot };
+}
+function bilMsg(s) {
+  if (!s.tot) return "Aucune tâche terminée sur cette semaine pour l’instant.";
+  var rs = S.members.map(function(m) { return { m: m, r: s.st[m.id].p / cap(m) }; }).sort(function(a, b) { return b.r - a.r; });
+  if (rs.length < 2) return "";
+  var hi = rs[0], lo = rs[rs.length - 1];
+  if (hi.r - lo.r < 0.25) return "La charge est bien répartie entre les membres du foyer.";
+  return esc(hi.m.name) + " a porté " + pc(hi.r) + " % de sa capacité, contre " + pc(lo.r) + " % pour " + esc(lo.m.name) + ". Un échange de tâches (onglet Tâches) pourrait rééquilibrer la semaine suivante.";
+}
+function sunCard() {
+  if (new Date().getDay() !== 0) return "";
+  return '<div class="card al ok"><b>Le bilan de la semaine est prêt</b><p class="mut" style="margin:4px 0 8px">Voyez qui a porté quoi cette semaine.</p><button class="btn" data-a="tab" data-v="bil">Voir le bilan</button></div>';
+}
+function histCard() {
+  var wk = [-3, -2, -1, 0].map(wkStats);
+  var h = '<div class="card"><b>Historique, 4 dernières semaines</b><p class="mut" style="margin:4px 0 0">Part de la capacité utilisée par chacun.</p>';
+  S.members.forEach(function(m) {
+    h += '<div style="margin-top:12px"><span style="font-size:14px;font-weight:600">' + esc(m.name) + '</span><div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px">';
+    wk.forEach(function(w) {
+      var p = pc(w.st[m.id].p / cap(m));
+      h += '<div style="flex:1;text-align:center"><div style="height:' + Math.max(3, Math.min(100, p) * 0.5) + 'px;background:' + col(p) + ';border-radius:4px"></div><small class="mut">' + p + ' %</small><br><small class="mut">' + w.b[0].slice(8) + '/' + w.b[0].slice(5, 7) + '</small></div>';
+    });
+    h += '</div></div>';
+  });
+  return h + '</div>';
+}
+function vBil() {
+  var s = wkStats(BW);
+  var h = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="-1" aria-label="Semaine précédente">‹</button><b>' + (BW === 0 ? "Cette semaine" : "Semaine du " + fmtFR(s.b[0])) + '</b><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="1" aria-label="Semaine suivante"' + (BW >= 0 ? " disabled" : "") + '>›</button></div><p class="mut" style="margin:6px 0 0;text-align:center">' + fmtFR(s.b[0]) + ' → ' + fmtFR(s.b[1]) + '</p></div>';
+  var msg = bilMsg(s);
+  if (msg) h += '<div class="card al"><b>' + msg + '</b></div>';
+  S.members.forEach(function(m) {
+    var x = s.st[m.id], p = pc(x.p / cap(m)), cnt = {};
+    x.l.forEach(function(e) { cnt[e.n] = (cnt[e.n] || 0) + 1; });
+    var names = Object.keys(cnt).map(function(k) { return esc(k) + (cnt[k] > 1 ? " ×" + cnt[k] : ""); }).join(" · ");
+    h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:17px">' + esc(m.name) + '</b><span class="mut">' + x.p + ' pts sur ' + cap(m) + ' · ' + p + ' %</span></div><div class="bar"><i style="width:' + Math.min(100, p) + '%;background:' + col(p) + '"></i></div><p class="mut" style="margin:8px 0 0">' + (s.tot ? Math.round(x.p / s.tot * 100) + " % de la charge réalisée du foyer. " : "") + (names ? "Fait : " + names : "Rien de coché.") + '</p></div>';
+  });
+  h += histCard();
+  return h + '<p class="mut" style="padding:0 4px">Seules les tâches cochées comptent : le bilan est juste si on coche au fur et à mesure. L’historique démarre à partir de cette mise à jour.</p>';
+}
+
 function vFam() {
   var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre famille et ouvrez-le sur l’écran du frigo : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
   h += '<div class="card"><b>Rappels dans votre agenda</b><p class="mut" style="margin:4px 0 8px">Téléchargez un fichier à ouvrir avec l’agenda de votre téléphone : les tâches y apparaissent avec une alarme. L’agenda ne se met pas à jour tout seul, refaites l’export après des changements importants.</p><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
@@ -546,8 +611,8 @@ function vFam() {
 }
 
 function render() {
-  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
-  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "vault" ? vVault() : vFam();
+  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
+  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
   var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro (" + esc(err) + ")"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
   var banner = '<div class="sync-banner"><span><b>CoPilote AI</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
   document.getElementById("app").innerHTML = banner + '<nav>' + T.map(function(x) { return '<button class="' + (V === x[0] ? "on" : "") + '" data-a="tab" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</nav>' + b;
@@ -736,6 +801,7 @@ document.addEventListener("click", function(e) {
   var a = el.dataset.a, id = el.dataset.id, t;
   if (a === "tab") V = el.dataset.v;
   else if (a === "per") P = el.dataset.v;
+  else if (a === "bw") BW = Math.max(-9, Math.min(0, BW + (+el.dataset.v)));
   else if (a === "cp") {
     var u = location.href;
     (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function() { el.textContent = "Lien copié !"; }, function() { window.prompt("Copiez ce lien :", u); });
@@ -768,7 +834,7 @@ document.addEventListener("click", function(e) {
   else if (a === "shc") { clearShot(); }
   else if (a === "sg") { t = T(id); if (t) { t.who = el.dataset.to; wT(t); } }
   else if (a === "sgx") { skip[id + "-" + el.dataset.to] = 1; }
-  else if (a === "chk") { t = T(id); if (t) { t.done = !isDone(t); t.doneOn = iso(sod(new Date())); wT(t); } }
+  else if (a === "chk") { t = T(id); if (t) { var was = isDone(t); t.done = !was; t.doneOn = iso(sod(new Date())); wT(t); logTick(t, !was); } }
   else if (a === "dt") { S.tasks = S.tasks.filter(function(x) { return x.id !== id; }); dT(id); }
   else if (a === "dm") { S.members = S.members.filter(function(x) { return x.id !== id; }); dM(id); }
   else if (a === "dv") { S.vault = S.vault.filter(function(x) { return x.id !== id; }); dV(id); }
