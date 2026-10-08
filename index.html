@@ -4,13 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CoPilote — Le pense-bête partagé</title>
-<!-- Lien vers le manifeste PWA -->
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* Variables de thèmes */
 :root { --bg:#F5F7F6; --card:#fff; --card-sub:#EBF2F0; --ink:#17302B; --mut:#5B706B; --line:#DCE4E1; --acc:#1F8A70; --acc-hover:#176B57; --soft:#E1F2EC; --ok:#2E9E6B; --warn:#D98A1F; --bad:#C94A3F; }
 [data-theme="ocean"] { --bg:#F0F4F8; --card:#FFFFFF; --card-sub:#E2E8F0; --ink:#1E293B; --mut:#64748B; --line:#CBD5E1; --acc:#0284C7; --acc-hover:#0369A1; --soft:#E0F2FE; --ok:#10B981; --warn:#F59E0B; --bad:#EF4444; }
 [data-theme="terracotta"] { --bg:#FAF7F5; --card:#FFFFFF; --card-sub:#F5ECE6; --ink:#3D2C2E; --mut:#8A7375; --line:#E6D5CC; --acc:#C85A32; --acc-hover:#A84522; --soft:#FAEDE6; --ok:#3B8262; --warn:#D97706; --bad:#DC2626; }
@@ -28,9 +26,12 @@ nav button{flex:1 1 auto;padding:9px 5px;border:1px solid var(--line);background
 nav button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
 .gs{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:6px;margin-bottom:12px}
-.g{text-align:center;background:var(--card-sub);border:1px solid var(--line);border-radius:14px;padding:10px 4px}
+.g{text-align:center;background:var(--card-sub);border:1px solid var(--line);border-radius:14px;padding:10px 4px;transition:all 0.2s}
+.g.drag-over{background:var(--soft);border-color:var(--acc);transform:scale(1.02)}
 .g b{display:block;font-size:13px;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);cursor:grab}
+.row:active{cursor:grabbing}
+.row.dragging{opacity:0.4}
 .row:first-child{border-top:0}
 .row .t{flex:1;min-width:0}
 .t p{margin:0;font-weight:600}.t small{color:var(--mut);font-size:12px}
@@ -39,12 +40,12 @@ nav button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weig
 .done p{text-decoration:line-through;color:var(--mut)}
 .pill{font-size:12px;background:var(--soft);color:var(--acc);font-weight:600;border-radius:8px;padding:2px 9px;white-space:nowrap}
 input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);border-radius:8px;min-width:0}
-.ed{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.ed{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px 0;border-top:1px solid var(--line);cursor:grab}
+.ed.dragging{opacity:0.4}
 .ed input{grid-column:1/-1}
 .btn{padding:9px 14px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn:hover{background:var(--acc-hover)}
 .btn-scan{background:#6366F1;border-color:#6366F1;color:#fff;padding:8px 12px;font-size:14px}
-.btn-scan:hover{background:#4F46E5}
 .lk{background:none;border:0;color:var(--bad);cursor:pointer;font-size:13px;padding:4px;font-weight:600}
 .add{display:grid;grid-template-columns:1fr 1fr;gap:6px}.add input{grid-column:1/-1}
 .seg{flex:1;padding:9px;border:1px solid var(--line);background:var(--card);border-radius:10px;cursor:pointer;font-size:14px;font-weight:600}.seg.on{background:var(--soft);border-color:var(--acc);color:var(--acc)}
@@ -55,7 +56,6 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 .al{border-left:4px solid var(--warn)}.al.bad{border-left-color:var(--bad)}.al.ok{border-left-color:var(--ok)}
 .mut{color:var(--mut);font-size:13px}.lt{color:var(--bad);font-weight:700}.td{color:var(--warn);font-weight:700}
 .g svg{display:block;margin:0 auto;width:100%;height:auto;max-width:84px}
-@media(max-width:340px){nav button{font-size:12px;padding:9px 3px}}
 .ai-loader{display:none;align-items:center;gap:8px;font-size:13px;color:#6366F1;font-weight:600;margin-top:10px}
 .spinner{width:16px;height:16px;border:2px solid #6366F1;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -104,7 +104,6 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 </div>
 
 <script>
-// Gestion et chargement du thème personnalisé au démarrage
 function changeTheme(themeName) {
   if (themeName === "dark") {
     document.documentElement.setAttribute("data-theme", "dark");
@@ -127,21 +126,17 @@ try {
   }
 } catch(e) {}
 
-// Enregistrement du Service Worker pour le mode PWA / hors-ligne
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function() {
-    navigator.serviceWorker.register("./sw.js").catch(function(err) {
-      console.log("Erreur d'enregistrement du Service Worker:", err);
-    });
+    navigator.serviceWorker.register("./sw.js").catch(function(err) {});
   });
 }
 
-// Clé OpenRouter
 function getKey() { try { return localStorage.getItem("copilote-openrouter-key") || ""; } catch(e) { return ""; } }
 function askKey() {
-  var k = (window.prompt("Collez votre clé OpenRouter (elle reste uniquement sur cet appareil) :", "") || "").trim();
+  var k = (window.prompt("Collez votre clé OpenRouter :", "") || "").trim();
   if (k && k.indexOf("sk-or-") === 0) { try { localStorage.setItem("copilote-openrouter-key", k); } catch(e) {} return k; }
-  if (k) alert("Cette clé ne ressemble pas à une clé OpenRouter (elle commence par sk-or-).");
+  if (k) alert("Format de clé incorrect.");
   return "";
 }
 
@@ -163,14 +158,8 @@ if (typeof firebase !== "undefined") {
     firebase.initializeApp(firebaseConfig);
     db = firebase.database();
     auth = firebase.auth();
-
-    // Connexion anonyme automatique pour respecter les règles de sécurité
-    auth.signInAnonymously().catch(function(error) {
-      console.error("Erreur d'authentification anonyme :", error);
-    });
-  } catch(e) { 
-    db = null; 
-  }
+    auth.signInAnonymously().catch(function(error) {});
+  } catch(e) { db = null; }
 }
 
 var ID_RE = /^[A-Za-z0-9_-]{20,64}$/;
@@ -376,7 +365,7 @@ function ring(p, sz) {
 
 function opt(v, l, cur) { return '<option value="' + v + '"' + (v === cur ? " selected" : "") + '>' + l + '</option>'; }
 function whoSel(t) { return opt("tour", "À tour de rôle", t.who) + S.members.map(function(m) { return opt(m.id, esc(m.name), t.who); }).join(""); }
-function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g" data-a="goto" data-id="' + m.id + '" style="cursor:pointer" aria-label="Voir les tâches de ' + esc(m.name) + '">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
+function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g" data-a="goto" data-id="' + m.id + '" ondragover="event.preventDefault(); this.classList.add(\'drag-over\')" ondragleave="this.classList.remove(\'drag-over\')" ondrop="dropOnMember(event, \'' + m.id + '\')" style="cursor:pointer" aria-label="Voir les tâches de ' + esc(m.name) + '">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
 
 function dayDiff(d) { return Math.round((d - sod(new Date())) / 864e5); }
 function urg(x) {
@@ -460,7 +449,7 @@ function vTb() {
     if (!l.length) h += '<p class="mut" style="margin:0">Rien de prévu sur cette période.</p>';
     l.forEach(function(x) {
       var d = isDone(x.t), u = urg(x);
-      h += '<div class="row' + (d ? " done" : "") + (u ? " u-" + u : "") + '"><button class="chk' + (d ? " d" : "") + '" data-a="chk" data-id="' + x.t.id + '" aria-label="Marquer comme fait">' + (d ? "✓" : "") + '</button><div class="t"><p>' + esc(x.t.name) + '</p><small class="' + (x.k === "late" && !d ? "lt" : "") + '">' + lbl(x) + '</small></div></div>';
+      h += '<div class="row' + (d ? " done" : "") + (u ? " u-" + u : "") + '" draggable="true" ondragstart="event.dataTransfer.setData(\'text/plain\', \'' + x.t.id + '\')"><button class="chk' + (d ? " d" : "") + '" data-a="chk" data-id="' + x.t.id + '" aria-label="Marquer comme fait">' + (d ? "✓" : "") + '</button><div class="t"><p>' + esc(x.t.name) + '</p><small class="' + (x.k === "late" && !d ? "lt" : "") + '">' + lbl(x) + '</small></div></div>';
     });
     h += '</div>';
   });
@@ -468,9 +457,9 @@ function vTb() {
 }
 
 function vTach() {
-  var h = '<div class="card"><div class="add"><div style="display:flex;gap:6px;grid-column:1/-1"><input id="nn" placeholder="Nouvelle tâche" style="flex:1"><button class="btn btn-scan" onclick="document.getElementById(\'aiFile\').click()" title="Scanner un document avec la caméra">📷 Scanner</button></div><input type="file" id="aiFile" accept="image/*" capture="environment" style="display:none" onchange="processAIPhoto(this)"><select id="nf" data-c="np">' + Object.keys(F).map(function(k) { return opt(k, k, "hebdo"); }).join("") + '</select><select id="nw" data-c="np">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, "2"); }).join("") + '</select><select id="nq" style="grid-column:1/-1"><option value="sug">' + esc(sugLabel(sugFor(2, "hebdo"))) + '</option><option value="tour">À tour de rôle</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance (facultative) <input id="nd" type="date"></label><button class="btn" data-a="addt" style="grid-column:1/-1">Ajouter la tâche</button></div><div id="aiLoader" class="ai-loader"><div class="spinner"></div><span>Analyse rapide par l’IA...</span></div></div><div class="card">';
-  S.tasks.forEach(function(t) {
-    h += '<div class="ed"><input data-c="tn" data-id="' + t.id + '" value="' + esc(t.name) + '"><select data-c="tf" data-id="' + t.id + '">' + Object.keys(F).map(function(k) { return opt(k, k, t.freq); }).join("") + '</select><select data-c="tw" data-id="' + t.id + '">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, String(t.w)); }).join("") + '</select><select data-c="tq" data-id="' + t.id + '">' + whoSel(t) + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance <input type="date" data-c="td" data-id="' + t.id + '" value="' + (t.due || "") + '"></label><div style="grid-column:1/-1;display:flex;justify-content:space-between"><button class="lk" style="color:var(--acc)" data-a="ict" data-id="' + t.id + '">📅 Ajouter à l’agenda</button><button class="lk" data-a="dt" data-id="' + t.id + '">Supprimer</button></div></div>';
+  var h = '<div class="card"><div class="add"><div style="display:flex;gap:6px;grid-column:1/-1"><input id="nn" placeholder="Nouvelle tâche" style="flex:1"><button class="btn btn-scan" onclick="document.getElementById(\'aiFile\').click()" title="Scanner un document avec la caméra">📷 Scanner</button></div><input type="file" id="aiFile" accept="image/*" capture="environment" style="display:none" onchange="processAIPhoto(this)"><select id="nf" data-c="np">' + Object.keys(F).map(function(k) { return opt(k, k, "hebdo"); }).join("") + '</select><select id="nw" data-c="np">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, "2"); }).join("") + '</select><select id="nq" style="grid-column:1/-1"><option value="sug">' + esc(sugLabel(sugFor(2, "hebdo"))) + '</option><option value="tour">À tour de rôle</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance (facultative) <input id="nd" type="date"></label><button class="btn" data-a="addt" style="grid-column:1/-1">Ajouter la tâche</button></div><div id="aiLoader" class="ai-loader"><div class="spinner"></div><span>Analyse rapide par l’IA...</span></div></div><div class="card" ondragover="event.preventDefault()" ondrop="dropOnTaskList(event)">';
+  S.tasks.forEach(function(t, index) {
+    h += '<div class="ed" draggable="true" ondragstart="event.dataTransfer.setData(\'text/task-idx\', \'' + index + '\')" ondragover="event.preventDefault()" ondrop="dropOnTask(event, ' + index + ')"><input data-c="tn" data-id="' + t.id + '" value="' + esc(t.name) + '"><select data-c="tf" data-id="' + t.id + '">' + Object.keys(F).map(function(k) { return opt(k, k, t.freq); }).join("") + '</select><select data-c="tw" data-id="' + t.id + '">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, String(t.w)); }).join("") + '</select><select data-c="tq" data-id="' + t.id + '">' + whoSel(t) + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance <input type="date" data-c="td" data-id="' + t.id + '" value="' + (t.due || "") + '"></label><div style="grid-column:1/-1;display:flex;justify-content:space-between"><button class="lk" style="color:var(--acc)" data-a="ict" data-id="' + t.id + '">📅 Ajouter à l’agenda</button><button class="lk" data-a="dt" data-id="' + t.id + '">Supprimer</button></div></div>';
   });
   return h + '</div>';
 }
@@ -515,31 +504,30 @@ function shareShot() {
     navigator.share({ files: [f], title: name }).then(function() { clearShot(); render(); }).catch(function(e) { if (!e || e.name !== "AbortError") downloadShot(); });
   } else {
     downloadShot();
-    alert("Le partage direct n'est pas disponible sur cet appareil : la photo a été téléchargée. Ajoutez-la ensuite à votre dossier Drive.");
+    alert("Partage direct non disponible : la photo a été téléchargée.");
   }
 }
 function docsSection() {
-  var h = '<div class="card"><b>📁 Documents</b><p class="mut" style="margin:4px 0 0">Prenez une photo, puis envoyez-la vers votre Drive. CoPilote ne garde aucune image : seuls les noms de dossiers et leurs liens Drive sont enregistrés.</p></div>';
+  var h = '<div class="card"><b>📁 Documents</b><p class="mut" style="margin:4px 0 0">Prenez une photo, puis envoyez-la vers votre Drive.</p></div>';
   if (shot) {
-    h += '<div class="card al"><b>Photo prête · ' + esc(shot.cat) + '</b><img src="' + shot.url + '" alt="Photo à envoyer" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;margin:8px 0;background:var(--card-sub)"><input id="shotName" value="' + esc(shot.name) + '" style="width:100%;margin-bottom:8px" aria-label="Nom du fichier"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-a="shs">Envoyer vers Drive</button><button class="seg" style="flex:none;padding:9px 14px" data-a="shd">Télécharger</button><button class="lk" data-a="shc">Annuler</button></div><p class="mut" style="margin:8px 0 0">Dans la fenêtre de partage, choisissez Drive puis le dossier « ' + esc(shot.cat) + ' ».</p></div>';
+    h += '<div class="card al"><b>Photo prête · ' + esc(shot.cat) + '</b><img src="' + shot.url + '" alt="Photo" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;margin:8px 0;background:var(--card-sub)"><input id="shotName" value="' + esc(shot.name) + '" style="width:100%;margin-bottom:8px"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-a="shs">Envoyer vers Drive</button><button class="seg" style="flex:none;padding:9px 14px" data-a="shd">Télécharger</button><button class="lk" data-a="shc">Annuler</button></div></div>';
   }
   (S.folders || []).forEach(function(f) {
     h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b>📁 ' + esc(f.name) + '</b><button class="lk" data-a="df" data-id="' + f.id + '">Supprimer</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" data-a="snap" data-id="' + f.id + '">📷 Photo</button>' +
       (driveOk(f.link) ? '<button class="seg" style="flex:none;padding:9px 14px" data-a="od" data-id="' + f.id + '">📂 Ouvrir Drive</button><button class="lk" style="color:var(--mut)" data-a="ld" data-id="' + f.id + '">Modifier le lien</button>' : '<button class="seg" style="flex:none;padding:9px 14px" data-a="ld" data-id="' + f.id + '">🔗 Lier un dossier Drive</button>') + '</div></div>';
   });
-  h += '<div class="card"><div class="row" style="border:0"><input id="fn" placeholder="Nouveau dossier (ex : École)" style="flex:1;min-width:0"><button class="btn" data-a="addf">Ajouter</button></div></div>';
+  h += '<div class="card"><div class="row" style="border:0"><input id="fn" placeholder="Nouveau dossier" style="flex:1;min-width:0"><button class="btn" data-a="addf">Ajouter</button></div></div>';
   return h;
 }
 
 function vVault() {
-  var h = docsSection() + '<div class="card"><b>🏥 Coffre-fort Santé & Maison</b><p class="mut" style="margin:4px 0 10px">Pointures, vêtements, pédiatre, ordonnances et numéros utiles.</p><div class="add"><input id="vn" placeholder="Prénom de l’enfant ou sujet"><input id="vs" placeholder="Pointure (ex: 31)"><input id="vc" placeholder="Taille vêtements (ex: 8 ans)"><input id="va" placeholder="Allergies, médecin ou notes"><button class="btn" data-a="addv" style="grid-column:1/-1">Ajouter au coffre-fort</button></div></div>';
+  var h = docsSection() + '<div class="card"><b>🏥 Coffre-fort Santé & Maison</b><p class="mut" style="margin:4px 0 10px">Pointures, vêtements, pédiatre, ordonnances.</p><div class="add"><input id="vn" placeholder="Prénom ou sujet"><input id="vs" placeholder="Pointure"><input id="vc" placeholder="Taille vêtements"><input id="va" placeholder="Allergies ou notes"><button class="btn" data-a="addv" style="grid-column:1/-1">Ajouter</button></div></div>';
   (S.vault || []).forEach(function(v) {
     h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;"><b>' + esc(v.name) + '</b><button class="lk" data-a="dv" data-id="' + v.id + '">Supprimer</button></div><p class="mut" style="margin:6px 0 2px">👟 Pointure : <b>' + esc(v.size || "-") + '</b> · 👕 Vêtements : <b>' + esc(v.clothes || "-") + '</b></p><p class="mut" style="margin:0">⚠️ Notes : ' + esc(v.notes || "Aucune") + '</p></div>';
   });
   return h;
 }
 
-// ---- Bilan hebdomadaire : ce qui a réellement été fait, par personne ----
 var BW = 0;
 function logTick(t, on) {
   var d = iso(sod(new Date())), id = t.id + "_" + d, i = -1;
@@ -561,25 +549,25 @@ function wkStats(off) {
   return { b: b, st: st, tot: tot };
 }
 function bilMsg(s) {
-  if (!s.tot) return "Aucune tâche terminée sur cette semaine pour l’instant.";
+  if (!s.tot) return "Aucune tâche terminée cette semaine.";
   var rs = S.members.map(function(m) { return { m: m, r: s.st[m.id].p / cap(m) }; }).sort(function(a, b) { return b.r - a.r; });
   if (rs.length < 2) return "";
   var hi = rs[0], lo = rs[rs.length - 1];
-  if (hi.r - lo.r < 0.25) return "La charge est bien répartie entre les membres du foyer.";
-  return esc(hi.m.name) + " a porté " + pc(hi.r) + " % de sa capacité, contre " + pc(lo.r) + " % pour " + esc(lo.m.name) + ". Un échange de tâches (onglet Tâches) pourrait rééquilibrer la semaine suivante.";
+  if (hi.r - lo.r < 0.25) return "La charge est bien répartie.";
+  return esc(hi.m.name) + " a porté " + pc(hi.r) + " % de sa capacité, contre " + pc(lo.r) + " % pour " + esc(lo.m.name) + ".";
 }
 function sunCard() {
   if (new Date().getDay() !== 0) return "";
-  return '<div class="card al ok"><b>Le bilan de la semaine est prêt</b><p class="mut" style="margin:4px 0 8px">Voyez qui a porté quoi cette semaine.</p><button class="btn" data-a="tab" data-v="bil">Voir le bilan</button></div>';
+  return '<div class="card al ok"><b>Bilan de la semaine prêt</b><p class="mut" style="margin:4px 0 8px">Voyez qui a porté quoi.</p><button class="btn" data-a="tab" data-v="bil">Voir le bilan</button></div>';
 }
 function histCard() {
   var wk = [-3, -2, -1, 0].map(wkStats);
-  var h = '<div class="card"><b>Historique, 4 dernières semaines</b><p class="mut" style="margin:4px 0 0">Part de la capacité utilisée par chacun.</p>';
+  var h = '<div class="card"><b>Historique (4 semaines)</b><p class="mut" style="margin:4px 0 0">Part de capacité utilisée.</p>';
   S.members.forEach(function(m) {
     h += '<div style="margin-top:12px"><span style="font-size:14px;font-weight:600">' + esc(m.name) + '</span><div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px">';
     wk.forEach(function(w) {
       var p = pc(w.st[m.id].p / cap(m));
-      h += '<div style="flex:1;text-align:center"><div style="height:' + Math.max(3, Math.min(100, p) * 0.5) + 'px;background:' + col(p) + ';border-radius:4px"></div><small class="mut">' + p + ' %</small><br><small class="mut">' + w.b[0].slice(8) + '/' + w.b[0].slice(5, 7) + '</small></div>';
+      h += '<div style="flex:1;text-align:center"><div style="height:' + Math.max(3, Math.min(100, p) * 0.5) + 'px;background:' + col(p) + ';border-radius:4px"></div><small class="mut">' + p + ' %</small></div>';
     });
     h += '</div></div>';
   });
@@ -587,36 +575,73 @@ function histCard() {
 }
 function vBil() {
   var s = wkStats(BW);
-  var h = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="-1" aria-label="Semaine précédente">‹</button><b>' + (BW === 0 ? "Cette semaine" : "Semaine du " + fmtFR(s.b[0])) + '</b><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="1" aria-label="Semaine suivante"' + (BW >= 0 ? " disabled" : "") + '>›</button></div><p class="mut" style="margin:6px 0 0;text-align:center">' + fmtFR(s.b[0]) + ' → ' + fmtFR(s.b[1]) + '</p></div>';
+  var h = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="-1">‹</button><b>' + (BW === 0 ? "Cette semaine" : "Semaine du " + fmtFR(s.b[0])) + '</b><button class="seg" style="flex:none;padding:6px 14px" data-a="bw" data-v="1"' + (BW >= 0 ? " disabled" : "") + '>›</button></div></div>';
   var msg = bilMsg(s);
   if (msg) h += '<div class="card al"><b>' + msg + '</b></div>';
   S.members.forEach(function(m) {
     var x = s.st[m.id], p = pc(x.p / cap(m)), cnt = {};
     x.l.forEach(function(e) { cnt[e.n] = (cnt[e.n] || 0) + 1; });
     var names = Object.keys(cnt).map(function(k) { return esc(k) + (cnt[k] > 1 ? " ×" + cnt[k] : ""); }).join(" · ");
-    h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:17px">' + esc(m.name) + '</b><span class="mut">' + x.p + ' pts sur ' + cap(m) + ' · ' + p + ' %</span></div><div class="bar"><i style="width:' + Math.min(100, p) + '%;background:' + col(p) + '"></i></div><p class="mut" style="margin:8px 0 0">' + (s.tot ? Math.round(x.p / s.tot * 100) + " % de la charge réalisée du foyer. " : "") + (names ? "Fait : " + names : "Rien de coché.") + '</p></div>';
+    h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:17px">' + esc(m.name) + '</b><span class="mut">' + x.p + ' pts sur ' + cap(m) + ' · ' + p + ' %</span></div><div class="bar"><i style="width:' + Math.min(100, p) + '%;background:' + col(p) + '"></i></div><p class="mut" style="margin:8px 0 0">' + (names ? "Fait : " + names : "Rien de coché.") + '</p></div>';
   });
   h += histCard();
-  return h + '<p class="mut" style="padding:0 4px">Seules les tâches cochées comptent : le bilan est juste si on coche au fur et à mesure. L’historique démarre à partir de cette mise à jour.</p>';
+  return h;
 }
 
 function vFam() {
-  var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre famille et ouvrez-le sur l’écran du frigo : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
-  h += '<div class="card"><b>Rappels dans votre agenda</b><p class="mut" style="margin:4px 0 8px">Téléchargez un fichier à ouvrir avec l’agenda de votre téléphone : les tâches y apparaissent avec une alarme. L’agenda ne se met pas à jour tout seul, refaites l’export après des changements importants.</p><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
-  h += '<div class="card"><b>Membres de la famille</b><p class="mut" style="margin:4px 0 8px">Prénom et capacité : le nombre de points de charge qu’une personne peut porter par semaine (25 pour un adulte, 10 pour un enfant).</p>';
+  var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre foyer.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
+  h += '<div class="card"><b>Rappels agenda</b><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
+  h += '<div class="card"><b>Membres</b>';
   S.members.forEach(function(m) {
-    h += '<div class="row"><input data-c="mn" data-id="' + m.id + '" value="' + esc(m.name) + '" style="flex:1;min-width:0"><input data-c="mc" data-id="' + m.id + '" type="number" min="1" max="100" value="' + cap(m) + '" style="width:64px;flex:none" aria-label="Capacité de ' + esc(m.name) + '"><button class="lk" data-a="dm" data-id="' + m.id + '">Supprimer</button></div>';
+    h += '<div class="row"><input data-c="mn" data-id="' + m.id + '" value="' + esc(m.name) + '" style="flex:1;min-width:0"><input data-c="mc" data-id="' + m.id + '" type="number" min="1" max="100" value="' + cap(m) + '" style="width:64px;flex:none"><button class="lk" data-a="dm" data-id="' + m.id + '">Supprimer</button></div>';
   });
-  h += '</div><div class="card"><div class="row" style="border:0"><input id="nm" placeholder="Prénom du nouveau membre" style="flex:1;min-width:0"><select id="nmc" style="flex:none"><option value="25">Adulte</option><option value="10">Enfant</option></select><button class="btn" data-a="am">Ajouter</button></div></div>';
+  h += '</div><div class="card"><div class="row" style="border:0"><input id="nm" placeholder="Nouveau membre" style="flex:1;min-width:0"><select id="nmc" style="flex:none"><option value="25">Adulte</option><option value="10">Enfant</option></select><button class="btn" data-a="am">Ajouter</button></div></div>';
   return h;
 }
 
 function render() {
   var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
   var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
-  var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro (" + esc(err) + ")"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
+  var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
   var banner = '<div class="sync-banner"><span><b>CoPilote AI</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
   document.getElementById("app").innerHTML = banner + '<nav>' + T.map(function(x) { return '<button class="' + (V === x[0] ? "on" : "") + '" data-a="tab" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</nav>' + b;
+}
+
+function dropOnMember(e, memberId) {
+  e.preventDefault();
+  var taskId = e.dataTransfer.getData("text/plain");
+  var t = T(taskId);
+  if (t) {
+    t.who = memberId;
+    wT(t);
+    render();
+  }
+}
+
+function dropOnTask(e, targetIndex) {
+  e.preventDefault();
+  var srcIndexStr = e.dataTransfer.getData("text/task-idx");
+  if (srcIndexStr === "") return;
+  var srcIndex = parseInt(srcIndexStr, 10);
+  if (isNaN(srcIndex) || srcIndex === targetIndex) return;
+  
+  var moved = S.tasks.splice(srcIndex, 1)[0];
+  S.tasks.splice(targetIndex, 0, moved);
+  S.tasks.forEach(function(item, idx) { item.o = idx; wT(item); });
+  render();
+}
+
+function dropOnTaskList(e) {
+  e.preventDefault();
+  var srcIndexStr = e.dataTransfer.getData("text/task-idx");
+  if (srcIndexStr === "") return;
+  var srcIndex = parseInt(srcIndexStr, 10);
+  if (isNaN(srcIndex)) return;
+  
+  var moved = S.tasks.splice(srcIndex, 1)[0];
+  S.tasks.push(moved);
+  S.tasks.forEach(function(item, idx) { item.o = idx; wT(item); });
+  render();
 }
 
 function compressImage(file, maxWidth, quality, callback) {
@@ -639,66 +664,42 @@ function compressImage(file, maxWidth, quality, callback) {
 
 function processAIPhoto(input) {
   if (!input.files || !input.files[0]) return;
-  var seen = false; try { seen = localStorage.getItem("copilote-ai-ok") === "1"; } catch(e) {}
-  if (!seen) {
-    if (!window.confirm("La photo sera envoyée à l'IA pour être lue. Continuer ?")) { input.value = ""; return; }
-    try { localStorage.setItem("copilote-ai-ok", "1"); } catch(e) {}
-  }
   var apiKey = getKey() || askKey();
   if (!apiKey) { input.value = ""; return; }
-
   var loader = document.getElementById("aiLoader");
   if (loader) loader.style.display = "flex";
-
-  var file = input.files[0];
-  input.value = "";
+  var file = input.files[0]; input.value = "";
   
   compressImage(file, 800, 0.65, function(dataUrl) {
-    var prompt = "Analyse ce document ou cette image. Extrais la tâche principale ou les actions à faire. " +
-                 "Renvoie UNIQUEMENT un objet JSON valide (sans markdown autour si possible) respectant strictement cette structure : " +
-                 "{\"tasks\": [{\"name\": \"Intitulé court de la tâche\", \"due\": \"YYYY-MM-DD ou chaîne vide\", \"weight\": 2}]}";
-
+    var prompt = "Analyse ce document. Extrais la tâche principale en JSON : {\"tasks\": [{\"name\": \"...\", \"due\": \"YYYY-MM-DD\", \"weight\": 2}]}";
     fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        "Authorization": "Bearer " + apiKey,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "CoPilote"
-      },
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
         temperature: 0.1
       })
     })
-    .then(function(res) { return res.json().then(function(data) { if (!res.ok) throw new Error(data.error?.message || "Erreur HTTP " + res.status); return data; }); })
+    .then(function(res) { return res.json(); })
     .then(function(data) {
       if (loader) loader.style.display = "none";
       try {
         var raw = data.choices[0].message.content;
-        // Extraction robuste du JSON via une expression régulière pour éviter les plantages si l'IA bavarde
         var match = raw.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("Format JSON introuvable dans la réponse.");
-        
         var res = JSON.parse(match[0]);
         var taskList = res.tasks || [res];
         if (taskList.length > 0) {
           var newTask = aiTask(taskList[0]);
           S.tasks.unshift(newTask);
           wT(newTask);
-          alert("✨ Tâche extraite :\n• " + newTask.name + (newTask.due ? " (" + fmtFR(newTask.due) + ")" : ""));
           render();
-        } else {
-          alert("Aucune tâche n'a pu être identifiée sur cette photo.");
         }
-      } catch(e) { 
-        alert("Erreur de lecture de la réponse de l'IA :\n" + e.message); 
-      }
+      } catch(e) { alert("Erreur d'analyse IA."); }
     })
     .catch(function(err) {
       if (loader) loader.style.display = "none";
-      alert("Erreur de connexion avec OpenRouter :\n" + err.message);
+      alert("Erreur de connexion.");
     });
   });
 }
@@ -719,31 +720,26 @@ function addD(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x;
 function ics(sel, onlyId) {
   var mem = S.members.filter(function(m) { return m.id === sel; })[0], today = sod(new Date()), n = 0;
   var st = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  var L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CoPilote//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:" + icsEsc("CoPilote" + (mem ? " - " + mem.name : ""))];
+  var L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CoPilote//FR", "X-WR-CALNAME:" + icsEsc("CoPilote" + (mem ? " - " + mem.name : ""))];
   function ev(uid, t, a, d, rr, alarms) {
     if (mem && (!a || a.id !== mem.id)) return;
     n++;
     L.push("BEGIN:VEVENT", "UID:" + uid + "@copilote", "DTSTAMP:" + st, "DTSTART;VALUE=DATE:" + ymd(d), "DTEND;VALUE=DATE:" + ymd(addD(d, 1)));
     if (rr) L.push("RRULE:" + rr);
-    L.push("SUMMARY:" + icsEsc((mem || !a ? "" : "[" + a.name + "] ") + t.name), "DESCRIPTION:" + icsEsc("Tâche CoPilote"), "TRANSP:TRANSPARENT");
-    alarms.forEach(function(tr) { L.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(t.name), "TRIGGER:" + tr, "END:VALARM"); });
-    L.push("END:VEVENT");
+    L.push("SUMMARY:" + icsEsc((mem || !a ? "" : "[" + a.name + "] ") + t.name), "END:VEVENT");
   }
   var dow = (today.getDay() + 6) % 7, mon = addD(today, -dow);
   S.tasks.forEach(function(t) {
     if (onlyId && t.id !== onlyId) return;
     if (t.freq === "quotidien" || t.freq === "hebdo") {
       var day = t.freq === "quotidien";
-      if (t.who !== "tour") { ev(t.id, t, who(t), day ? today : (dow === 0 ? today : addD(mon, 7)), day ? "FREQ=DAILY" : "FREQ=WEEKLY", [day ? "PT17H" : "PT8H"]); }
-      else for (var w = 0; w < 8; w++) { var ws = addD(mon, 7 * w), start = w === 0 ? today : ws; ev(t.id + "-" + w, t, who(t, ws), start, day ? "FREQ=DAILY;COUNT=" + (w === 0 ? 7 - dow : 7) : "", [day ? "PT17H" : "PT8H"]); }
+      if (t.who !== "tour") { ev(t.id, t, who(t), day ? today : (dow === 0 ? today : addD(mon, 7)), day ? "FREQ=DAILY" : "FREQ=WEEKLY", []); }
+      else for (var w = 0; w < 8; w++) { var ws = addD(mon, 7 * w), start = w === 0 ? today : ws; ev(t.id + "-" + w, t, who(t, ws), start, day ? "FREQ=DAILY;COUNT=" + (w === 0 ? 7 - dow : 7) : "", []); }
       return;
     }
     if (!t.due) return;
     var d = parse(t.due);
-    if (t.freq === "mensuel") { var x = new Date(today.getFullYear(), today.getMonth(), d.getDate()); if (x < today) x = new Date(today.getFullYear(), today.getMonth() + 1, d.getDate()); d = x; }
-    else if (t.freq === "annuel") { while (d < today) d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate()); }
-    else if (d < today) return;
-    ev(t.id, t, who(t, d), d, t.freq === "mensuel" ? "FREQ=MONTHLY" : t.freq === "annuel" ? "FREQ=YEARLY" : "", t.freq === "annuel" ? ["-P13DT15H", "-PT15H"] : ["-PT15H"]);
+    ev(t.id, t, who(t, d), d, "", []);
   });
   L.push("END:VCALENDAR");
   return { text: L.map(fold).join("\r\n") + "\r\n", n: n };
@@ -759,15 +755,9 @@ var wl = null;
 function wlState(t) { var e = document.getElementById("wlState"); if (e) e.textContent = t; }
 function keepAwake() {
   var on = document.getElementById("frigoView").style.display === "block";
-  if (!on) { if (wl) { try { wl.release(); } catch(e) {} wl = null; } return; }
-  if (!navigator.wakeLock) { wlState("Veille non bloquée sur cet appareil."); return; }
-  if (wl) return;
-  navigator.wakeLock.request("screen").then(function(l) {
-    wl = l; wlState("🔆 Écran maintenu allumé");
-    l.addEventListener("release", function() { wl = null; });
-  }).catch(function() { wlState("Impossible de garder l'écran allumé."); });
+  if (!on || !navigator.wakeLock) return;
+  navigator.wakeLock.request("screen").then(function(l) { wl = l; }).catch(function() {});
 }
-document.addEventListener("visibilitychange", function() { if (!document.hidden) keepAwake(); });
 
 function toggleFrigo(show) {
   document.getElementById('frigoView').style.display = show ? 'block' : 'none';
@@ -785,11 +775,7 @@ function updateFrigo() {
   S.members.forEach(function(m) {
     var l = its.filter(function(x) { var a = who(x.t, x.d); return !isDone(x.t) && a && a.id === m.id; }).sort(byUrg);
     h += '<div class="fr-card"><div style="display:flex;align-items:center;gap:12px">' + ring(pct(m), 72) + '<h2>' + esc(m.name) + '</h2></div>';
-    if (l.length) {
-      h += '<ul>' + l.slice(0, 6).map(function(x) { var u = urg(x); return '<li>' + esc(x.t.name) + (x.k === "rec" ? "" : ' <small class="' + (u === "late" ? "lt" : u === "today" ? "td" : "") + '">' + lbl(x) + '</small>') + '</li>'; }).join("") + '</ul>';
-    } else {
-      h += '<p class="mut" style="margin-top:12px">Rien à faire</p>';
-    }
+    h += l.length ? '<ul>' + l.slice(0, 6).map(function(x) { return '<li>' + esc(x.t.name) + '</li>'; }).join("") + '</ul>' : '<p class="mut" style="margin-top:12px">Rien à faire</p>';
     h += '</div>';
   });
   document.getElementById("frigoContent").innerHTML = h;
@@ -806,31 +792,20 @@ document.addEventListener("click", function(e) {
   else if (a === "bw") BW = Math.max(-9, Math.min(0, BW + (+el.dataset.v)));
   else if (a === "cp") {
     var u = location.href;
-    (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function() { el.textContent = "Lien copié !"; }, function() { window.prompt("Copiez ce lien :", u); });
+    (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function() { el.textContent = "Lien copié !"; }, function() { window.prompt("Lien :", u); });
     return;
   }
-  else if (a === "ics") {
-    var sel = document.getElementById("ex").value, rs = ics(sel);
-    if (!rs.n) { el.textContent = "Rien à exporter"; return; }
-    var mm = S.members.filter(function(x) { return x.id === sel; })[0];
-    saveIcs(rs.text, "copilote" + (mm ? "-" + slug(mm.name) : "") + ".ics"); el.textContent = "Fichier téléchargé"; return;
-  }
-  else if (a === "ict") {
-    var r1 = ics("all", id);
-    if (!r1.n) { alert("Cette tâche n'a pas d'échéance."); return; }
-    var tk = T(id); saveIcs(r1.text, "tache-" + slug(tk ? tk.name : "") + ".ics"); return;
-  }
+  else if (a === "ics") { var rs = ics(document.getElementById("ex").value); saveIcs(rs.text, "copilote.ics"); return; }
+  else if (a === "ict") { var r1 = ics("all", id); if (r1.n) saveIcs(r1.text, "tache.ics"); return; }
   else if (a === "snap") { shotCat = id; document.getElementById("docFile").click(); return; }
-  else if (a === "od") { var fo = (S.folders || []).filter(function(x) { return x.id === id; })[0]; if (fo && driveOk(fo.link)) window.open(fo.link, "_blank", "noopener"); return; }
+  else if (a === "od") { var fo = S.folders.filter(function(x) { return x.id === id; })[0]; if (fo && driveOk(fo.link)) window.open(fo.link, "_blank"); return; }
   else if (a === "ld") {
-    var fl = (S.folders || []).filter(function(x) { return x.id === id; })[0]; if (!fl) return;
-    var lu = window.prompt("Collez le lien du dossier Drive :", fl.link || "");
-    if (lu === null) return; lu = lu.trim();
-    if (lu && !driveOk(lu)) { alert("Lien Google Drive invalide."); return; }
-    fl.link = lu; wF(fl);
+    var fl = S.folders.filter(function(x) { return x.id === id; })[0]; if (!fl) return;
+    var lu = window.prompt("Lien Google Drive :", fl.link || "");
+    if (lu !== null) { fl.link = lu.trim(); wF(fl); }
   }
-  else if (a === "df") { if (!window.confirm("Retirer ce dossier ?")) return; S.folders = S.folders.filter(function(x) { return x.id !== id; }); dF(id); }
-  else if (a === "addf") { var fn = document.getElementById("fn").value.trim(); if (!fn) return; var ff = { id: uid(), name: fn.slice(0, 40), link: "", o: S.folders.length }; S.folders.push(ff); wF(ff); }
+  else if (a === "df") { S.folders = S.folders.filter(function(x) { return x.id !== id; }); dF(id); }
+  else if (a === "addf") { var fn = document.getElementById("fn").value.trim(); if (fn) { var ff = { id: uid(), name: fn, link: "", o: S.folders.length }; S.folders.push(ff); wF(ff); } }
   else if (a === "shs") { shareShot(); return; }
   else if (a === "shd") { downloadShot(); return; }
   else if (a === "shc") { clearShot(); }
@@ -853,8 +828,7 @@ document.addEventListener("click", function(e) {
     S.vault.push(v); wV(v);
   }
   else if (a === "am") {
-    var m = document.getElementById("nm").value.trim(); if (!m) return;
-    var nm = { id: uid(), name: m, o: S.members.length, cap: +document.getElementById("nmc").value || 25 }; S.members.push(nm); wM(nm);
+    var m = document.getElementById("nm").value.trim(); if (m) { var nm = { id: uid(), name: m, o: S.members.length, cap: +document.getElementById("nmc").value || 25 }; S.members.push(nm); wM(nm); }
   }
   render();
 });
@@ -863,16 +837,8 @@ document.addEventListener("change", function(e) {
   var el = e.target.closest("[data-c]"); if (!el) return;
   var c = el.dataset.c, id = el.dataset.id, v = el.value, t;
   if (c === "np") { updSug(); return; }
-  if (c === "mc") {
-    var mm = S.members.filter(function(x) { return x.id === id; })[0], nv = Math.round(+v);
-    if (mm && nv >= 1 && nv <= 100) { mm.cap = nv; wM(mm); } else render();
-    return;
-  }
-  if (c === "mn") {
-    var m = S.members.filter(function(x) { return x.id === id; })[0];
-    if (m && v.trim()) { m.name = v.trim(); wM(m); } else render();
-    return;
-  }
+  if (c === "mc") { var mm = S.members.filter(function(x) { return x.id === id; })[0]; if (mm) { mm.cap = Math.round(+v); wM(mm); } return; }
+  if (c === "mn") { var m = S.members.filter(function(x) { return x.id === id; })[0]; if (m && v.trim()) { m.name = v.trim(); wM(m); } return; }
   t = T(id); if (!t) return;
   if (c === "tn") { if (v.trim()) t.name = v.trim(); }
   else if (c === "tf") t.freq = v;
@@ -882,7 +848,6 @@ document.addEventListener("change", function(e) {
   wT(t);
 });
 
-setInterval(function() { if (document.getElementById("frigoView").style.display === "block") updateFrigo(); }, 30000);
 render();
 </script>
 </body>
