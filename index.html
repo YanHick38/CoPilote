@@ -570,8 +570,9 @@ function processAIPhoto(input) {
   input.value = "";
   
   compressImage(file, 800, 0.65, function(dataUrl) {
-    var prompt = "Analyse ce document. Renvoie UNIQUEMENT un objet JSON strict avec cette structure exacte : " +
-                 "{\"tasks\": [{\"name\": \"Action courte\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
+    var prompt = "Analyse ce document ou cette image. Extrais la tâche principale ou les actions à faire. " +
+                 "Renvoie UNIQUEMENT un objet JSON valide (sans markdown autour si possible) respectant strictement cette structure : " +
+                 "{\"tasks\": [{\"name\": \"Intitulé court de la tâche\", \"due\": \"YYYY-MM-DD ou chaîne vide\", \"weight\": 2}]}";
 
     fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -582,7 +583,7 @@ function processAIPhoto(input) {
         "X-Title": "CoPilote"
       },
       body: JSON.stringify({
-        model: "google/gemini-flash-1.5:free",
+        model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
         temperature: 0.1
       })
@@ -591,8 +592,12 @@ function processAIPhoto(input) {
     .then(function(data) {
       if (loader) loader.style.display = "none";
       try {
-        var raw = data.choices[0].message.content.replace(/```json|```/g, "").trim();
-        var res = JSON.parse(raw);
+        var raw = data.choices[0].message.content;
+        // Extraction robuste du JSON via une expression régulière pour éviter les plantages si l'IA bavarde
+        var match = raw.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error("Format JSON introuvable dans la réponse.");
+        
+        var res = JSON.parse(match[0]);
         var taskList = res.tasks || [res];
         if (taskList.length > 0) {
           var newTask = aiTask(taskList[0]);
@@ -601,13 +606,15 @@ function processAIPhoto(input) {
           alert("✨ Tâche extraite :\n• " + newTask.name + (newTask.due ? " (" + fmtFR(newTask.due) + ")" : ""));
           render();
         } else {
-          alert("Aucune tâche trouvée.");
+          alert("Aucune tâche n'a pu être identifiée sur cette photo.");
         }
-      } catch(e) { alert("L'analyse a échoué."); }
+      } catch(e) { 
+        alert("Erreur de lecture de la réponse de l'IA :\n" + e.message); 
+      }
     })
     .catch(function(err) {
       if (loader) loader.style.display = "none";
-      alert("Erreur de connexion :\n" + err.message);
+      alert("Erreur de connexion avec OpenRouter :\n" + err.message);
     });
   });
 }
