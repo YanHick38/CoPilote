@@ -223,6 +223,8 @@ function init() {
       return { id: uid(), name: d[0], w: d[1], freq: d[2], who: d[3], done: false, due: DU[d[0]] !== undefined ? plus(DU[d[0]]) : "", o: i, c: i };
     }),
     vault: [],
+    shop: [],
+    inv: [],
     folders: defaultFolders()
   };
 }
@@ -232,6 +234,8 @@ function norm(x) {
   x.members.forEach(function(m, i) { if (m.o === undefined) m.o = i; });
   x.tasks.forEach(function(t, i) { if (t.o === undefined) t.o = i; if (t.c === undefined) t.c = i; if (t.due === undefined) t.due = ""; if (t.who === undefined) t.who = "none"; });
   if (!x.vault) x.vault = [];
+  if (!x.shop) x.shop = [];
+  if (!x.inv) x.inv = [];
   if (!x.log) x.log = [];
   delete x.apiKey;
   if (!x.folders || !x.folders.length) x.folders = defaultFolders();
@@ -257,14 +261,20 @@ function dV(id) { keep(); if (db) ref("vault/" + id).remove().catch(fail); }
 function wF(f) { keep(); if (db) ref("folders/" + f.id).set(clean(f)).catch(fail); }
 function dF(id) { keep(); if (db) ref("folders/" + id).remove().catch(fail); }
 function wLg(e) { keep(); if (db) ref("log/" + e.id).set(clean(e)).catch(fail); }
+function wSh(x) { keep(); if (db) ref("shop/" + x.id).set(clean(x)).catch(fail); }
+function dSh(id) { keep(); if (db) ref("shop/" + id).remove().catch(fail); }
+function wIv(x) { keep(); if (db) ref("inv/" + x.id).set(clean(x)).catch(fail); }
+function dIv(id) { keep(); if (db) ref("inv/" + id).remove().catch(fail); }
 function dLg(id) { keep(); if (db) ref("log/" + id).remove().catch(fail); }
 
 function toDB(x) {
-  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, folders: {}, log: {} };
+  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, shop: {}, inv: {}, folders: {}, log: {} };
   x.members.forEach(function(m) { o.members[m.id] = clean(m); });
   x.tasks.forEach(function(t) { o.tasks[t.id] = clean(t); });
   (x.vault || []).forEach(function(v) { o.vault[v.id] = clean(v); });
   (x.log || []).forEach(function(e) { o.log[e.id] = clean(e); });
+  (x.shop || []).forEach(function(e) { o.shop[e.id] = clean(e); });
+  (x.inv || []).forEach(function(e) { o.inv[e.id] = clean(e); });
   (x.folders || []).forEach(function(f) { o.folders[f.id] = clean(f); });
   return o;
 }
@@ -273,7 +283,7 @@ function fromDB(v) {
   function arr(o) {
     return Object.keys(o || {}).map(function(k) { var e = o[k]; if (!e.id) e.id = k; return e; }).sort(function(a, b) { return (a.o || 0) - (b.o || 0); });
   }
-  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), folders: arr(v.folders), log: arr(v.log) });
+  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), shop: arr(v.shop), inv: arr(v.inv), folders: arr(v.folders), log: arr(v.log) });
 }
 
 function editing() {
@@ -281,7 +291,7 @@ function editing() {
   return !!(a && (a.tagName === "INPUT" || a.tagName === "SELECT" || a.tagName === "TEXTAREA") && document.getElementById("app").contains(a));
 }
 
-function refresh() { if (editing()) { pend = true; return; } render(); }
+function refresh() { if (frigoOn()) updateFrigo(); if (editing()) { pend = true; return; } render(); }
 document.addEventListener("focusout", function() { setTimeout(function() { if (pend && !editing()) { pend = false; render(); } }, 80); });
 
 if (db && auth) {
@@ -663,6 +673,102 @@ function vBil() {
   return h;
 }
 
+/* ===== Courses & inventaire ===== */
+var CV = "liste", lastCode = "", lastAt = 0, scanT = null, scanStream = null, scanBusy = false, zxr = null;
+function byId(arr, id) { return arr.filter(function(x) { return x.id === id; })[0]; }
+function toShop(name) {
+  var k = (name || "").toLowerCase();
+  if (S.shop.some(function(x) { return !x.done && x.name.toLowerCase() === k; })) return;
+  var it = { id: uid(), name: name, q: 1, done: false, o: Date.now() };
+  S.shop.push(it); wSh(it);
+}
+function addInv(code, name) {
+  var it = code ? S.inv.filter(function(x) { return x.code === code; })[0] : S.inv.filter(function(x) { return x.name.toLowerCase() === name.toLowerCase(); })[0];
+  if (it) { it.q = (it.q || 0) + 1; wIv(it); return it; }
+  it = { id: uid(), name: name || ("Produit " + code), code: code || "", q: 1, o: Date.now() };
+  S.inv.push(it); wIv(it); return it;
+}
+function vCourses() {
+  var open = S.shop.filter(function(x) { return !x.done; }).length;
+  var h = '<div style="display:flex;gap:6px;margin-bottom:12px"><button class="seg ' + (CV === "liste" ? "on" : "") + '" data-a="cv" data-v="liste">🛒 Liste (' + open + ')</button><button class="seg ' + (CV === "inv" ? "on" : "") + '" data-a="cv" data-v="inv">📦 Inventaire (' + S.inv.length + ')</button></div>';
+  if (CV === "liste") {
+    h += '<div class="card"><div class="row" style="border:0;cursor:default"><input id="shn" placeholder="Ajouter un article" style="flex:1;min-width:0"><button class="btn" data-a="addsh">Ajouter</button></div></div>';
+    var todo = S.shop.filter(function(x) { return !x.done; }), done = S.shop.filter(function(x) { return x.done; });
+    h += '<div class="card">';
+    if (!S.shop.length) h += '<p class="mut" style="margin:0">La liste est vide. Ajoutez un article, ou touchez 🛒 sur un produit de l\'inventaire.</p>';
+    todo.concat(done).forEach(function(x) {
+      h += '<div class="row' + (x.done ? ' done' : '') + '" style="cursor:default"><button class="chk' + (x.done ? ' d' : '') + '" data-a="chsh" data-id="' + x.id + '">' + (x.done ? '✓' : '') + '</button><div class="t"><p>' + esc(x.name) + '</p></div><button class="seg" style="flex:none;padding:2px 9px" data-a="qt" data-k="sh" data-v="-1" data-id="' + x.id + '">−</button><b>' + (x.q || 1) + '</b><button class="seg" style="flex:none;padding:2px 9px" data-a="qt" data-k="sh" data-v="1" data-id="' + x.id + '">+</button><button class="lk" data-a="dsh" data-id="' + x.id + '">✕</button></div>';
+    });
+    h += '</div>';
+    if (done.length) h += '<button class="btn" style="width:100%" data-a="bought">📦 Rentré des courses : ranger les ' + done.length + ' article(s) coché(s) dans l\'inventaire</button>';
+  } else {
+    h += '<div class="card"><button class="btn btn-scan" style="width:100%;padding:12px" data-a="scan">📷 Scanner des codes-barres</button><p class="mut" style="margin:8px 0 0">Chaque scan ajoute 1 au stock du produit. Le nom est cherché automatiquement (Open Food Facts) ; sinon renommez-le ici.</p></div>';
+    h += '<div class="card"><div class="row" style="border:0;cursor:default"><input id="ivn" placeholder="Nom" style="flex:1;min-width:0"><input id="ivc" placeholder="Code (option)" inputmode="numeric" style="width:120px;flex:none"><button class="btn" data-a="addiv">+</button></div></div>';
+    h += '<div class="card">';
+    if (!S.inv.length) h += '<p class="mut" style="margin:0">Inventaire vide. Scannez vos produits pour commencer.</p>';
+    S.inv.slice().sort(function(a, b) { return a.name.localeCompare(b.name); }).forEach(function(x) {
+      h += '<div class="row" style="cursor:default"><div class="t"><input data-c="rn" data-id="' + x.id + '" value="' + esc(x.name) + '" style="width:100%;border:0;background:none;padding:2px 0;font-weight:600">' + (x.code ? '<small>' + esc(x.code) + '</small>' : '') + (x.q === 0 ? ' <span class="pill">épuisé</span>' : '') + '</div><button class="seg" style="flex:none;padding:2px 9px" data-a="qt" data-k="iv" data-v="-1" data-id="' + x.id + '">−</button><b>' + (x.q || 0) + '</b><button class="seg" style="flex:none;padding:2px 9px" data-a="qt" data-k="iv" data-v="1" data-id="' + x.id + '">+</button><button class="lk" style="color:var(--acc)" data-a="tosh" data-id="' + x.id + '" title="Ajouter à la liste de courses">🛒</button><button class="lk" data-a="div" data-id="' + x.id + '">✕</button></div>';
+    });
+    h += '</div>';
+  }
+  return h;
+}
+
+/* Scanner */
+function scanMsg(t) { var m = document.getElementById("scanmsg"); if (m) m.textContent = t; }
+function buildOv() {
+  var ov = document.getElementById("scanov"); if (ov) return ov;
+  ov = document.createElement("div"); ov.id = "scanov";
+  ov.style.cssText = "position:fixed;inset:0;background:#000;z-index:200;display:none;flex-direction:column";
+  ov.innerHTML = '<video id="scanv" playsinline muted style="flex:1;min-height:0;width:100%;object-fit:cover"></video><div id="scanmsg" style="color:#fff;padding:12px;text-align:center;font-size:15px;font-weight:600"></div><div style="display:flex;gap:8px;padding:0 12px 16px"><input id="scanman" inputmode="numeric" placeholder="Ou tapez le code" style="flex:1;min-width:0"><button class="btn" id="scanok">OK</button><button class="btn" id="scanx" style="background:#555;border-color:#555">Fermer</button></div>';
+  document.body.appendChild(ov);
+  document.getElementById("scanx").onclick = stopScan;
+  document.getElementById("scanok").onclick = function() { var i = document.getElementById("scanman"), c = i.value.trim(); if (/^\d{6,14}$/.test(c)) { i.value = ""; onCode(c); } else scanMsg("Code invalide (6 à 14 chiffres)."); };
+  return ov;
+}
+function camErr() { scanMsg("Caméra indisponible. Tapez le code à la main ci-dessous."); }
+function startScan() {
+  var ov = buildOv(), v = document.getElementById("scanv"); ov.style.display = "flex"; scanMsg("Visez un code-barres…");
+  if (window.BarcodeDetector) {
+    var det = new BarcodeDetector();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }).then(function(st) {
+      scanStream = st; v.srcObject = st; return v.play();
+    }).then(function() {
+      scanT = setInterval(function() {
+        if (scanBusy || v.readyState < 2) return; scanBusy = true;
+        det.detect(v).then(function(r) { scanBusy = false; for (var i = 0; i < r.length; i++) if (/^\d{6,14}$/.test(r[i].rawValue)) { onCode(r[i].rawValue); break; } }).catch(function() { scanBusy = false; });
+      }, 350);
+    }).catch(camErr);
+  } else {
+    var go = function() { zxr = new ZXing.BrowserMultiFormatReader(); zxr.decodeFromVideoDevice(null, "scanv", function(res) { if (res && /^\d{6,14}$/.test(res.getText())) onCode(res.getText()); }).catch(camErr); };
+    if (window.ZXing) go();
+    else { var sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"; sc.onload = go; sc.onerror = camErr; document.head.appendChild(sc); }
+  }
+}
+function stopScan() {
+  if (scanT) { clearInterval(scanT); scanT = null; }
+  if (zxr) { try { zxr.reset(); } catch (e) {} zxr = null; }
+  if (scanStream) { scanStream.getTracks().forEach(function(t) { t.stop(); }); scanStream = null; }
+  var ov = document.getElementById("scanov"); if (ov) ov.style.display = "none";
+  render();
+}
+function onCode(code) {
+  var now = Date.now(); if (code === lastCode && now - lastAt < 3000) return; lastCode = code; lastAt = now;
+  var known = S.inv.some(function(x) { return x.code === code; }), it = addInv(code, "");
+  if (navigator.vibrate) navigator.vibrate(60);
+  scanMsg("✓ " + it.name + " (×" + it.q + ")"); refresh();
+  if (!known) lookup(code, it.id);
+}
+function lookup(code, id) {
+  fetch("https://world.openfoodfacts.org/api/v2/product/" + code + ".json?fields=product_name,brands").then(function(r) { return r.json(); }).then(function(j) {
+    var p = j && j.product, n = p && p.product_name; if (!n) return;
+    var it = byId(S.inv, id); if (!it || it.name !== "Produit " + code) return;
+    it.name = p.brands ? n + " — " + p.brands.split(",")[0].trim() : n; wIv(it);
+    if (document.getElementById("scanov") && document.getElementById("scanov").style.display === "flex") scanMsg("✓ " + it.name + " (×" + it.q + ")");
+    refresh();
+  }).catch(function() {});
+}
+
 function vFam() {
   var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre foyer.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
   h += '<div class="card"><b>Rappels agenda</b><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
@@ -675,8 +781,8 @@ function vFam() {
 }
 
 function render() {
-  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
-  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
+  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["cou", "Courses"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
+  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "cou" ? vCourses() : V === "vault" ? vVault() : vFam();
   var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
   var banner = '<div class="sync-banner"><span><b>CoPilote AI 🎮</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
   document.getElementById("app").innerHTML = banner + '<nav>' + T.map(function(x) { return '<button class="' + (V === x[0] ? "on" : "") + '" data-a="tab" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</nav>' + b;
@@ -853,8 +959,14 @@ function updateFrigo() {
     h += l.length ? '<ul>' + l.slice(0, 6).map(function(x) { return '<li>' + esc(x.t.name) + '</li>'; }).join("") + '</ul>' : '<p class="mut" style="margin-top:12px">Rien à faire</p>';
     h += '</div>';
   });
+  var buy = S.shop.filter(function(x) { return !x.done; });
+  if (buy.length) {
+    h += '<div class="fr-card"><h2>🛒 À acheter</h2><ul>' + buy.slice(0, 10).map(function(x) { return '<li>' + esc(x.name) + ((x.q || 1) > 1 ? ' ×' + x.q : '') + '</li>'; }).join("") + '</ul>' + (buy.length > 10 ? '<p class="mut" style="margin:8px 0 0">+ ' + (buy.length - 10) + ' autre(s)</p>' : '') + '</div>';
+  }
   document.getElementById("frigoContent").innerHTML = h;
 }
+function frigoOn() { return document.getElementById("frigoView").style.display === "block"; }
+setInterval(function() { if (frigoOn()) updateFrigo(); }, 30000);
 
 function T(id) { return S.tasks.filter(function(t) { return t.id === id; })[0]; }
 
@@ -902,6 +1014,26 @@ document.addEventListener("click", function(e) {
     var v = { id: uid(), name: vn, size: document.getElementById("vs").value, clothes: document.getElementById("vc").value, notes: document.getElementById("va").value };
     S.vault.push(v); wV(v);
   }
+  else if (a === "cv") CV = el.dataset.v;
+  else if (a === "addsh") { var sn = document.getElementById("shn").value.trim(); if (sn) { var sx = { id: uid(), name: sn, q: 1, done: false, o: Date.now() }; S.shop.push(sx); wSh(sx); } }
+  else if (a === "chsh") { var s1 = byId(S.shop, id); if (s1) { s1.done = !s1.done; wSh(s1); } }
+  else if (a === "dsh") { S.shop = S.shop.filter(function(x) { return x.id !== id; }); dSh(id); }
+  else if (a === "div") { S.inv = S.inv.filter(function(x) { return x.id !== id; }); dIv(id); }
+  else if (a === "tosh") { var i1 = byId(S.inv, id); if (i1) toShop(i1.name); }
+  else if (a === "qt") {
+    var isSh = el.dataset.k === "sh", it2 = byId(isSh ? S.shop : S.inv, id);
+    if (it2) { it2.q = Math.max(isSh ? 1 : 0, (it2.q || 0) + (+el.dataset.v)); if (isSh) wSh(it2); else { wIv(it2); if (it2.q === 0) toShop(it2.name); } }
+  }
+  else if (a === "addiv") { var nn = document.getElementById("ivn").value.trim(), cc = document.getElementById("ivc").value.trim(); if (nn || cc) addInv(cc, nn); }
+  else if (a === "scan") { startScan(); return; }
+  else if (a === "bought") {
+    var dn = S.shop.filter(function(x) { return x.done; }); S.shop = S.shop.filter(function(x) { return !x.done; });
+    dn.forEach(function(x) {
+      dSh(x.id);
+      var m2 = S.inv.filter(function(y) { return y.name.toLowerCase() === x.name.toLowerCase(); })[0];
+      if (m2) { m2.q = (m2.q || 0) + (x.q || 1); wIv(m2); } else { var n2 = { id: uid(), name: x.name, code: "", q: x.q || 1, o: Date.now() }; S.inv.push(n2); wIv(n2); }
+    });
+  }
   else if (a === "am") {
     var m = document.getElementById("nm").value.trim(); if (m) { var nm = { id: uid(), name: m, o: S.members.length, cap: +document.getElementById("nmc").value || 25 }; S.members.push(nm); wM(nm); }
   }
@@ -914,6 +1046,7 @@ document.addEventListener("change", function(e) {
   if (c === "np") { updSug(); return; }
   if (c === "mc") { var mm = S.members.filter(function(x) { return x.id === id; })[0]; if (mm) { mm.cap = Math.round(+v); wM(mm); } return; }
   if (c === "mn") { var m = S.members.filter(function(x) { return x.id === id; })[0]; if (m && v.trim()) { m.name = v.trim(); wM(m); } return; }
+  if (c === "rn") { var iv = byId(S.inv, id); if (iv && v.trim()) { iv.name = v.trim(); wIv(iv); } return; }
   t = T(id); if (!t) return;
   if (c === "tn") { if (v.trim()) t.name = v.trim(); }
   else if (c === "tf") t.freq = v;
