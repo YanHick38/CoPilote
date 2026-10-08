@@ -536,13 +536,6 @@ function vVault() {
 
 function vFam() {
   var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre famille et ouvrez-le sur l’écran du frigo : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
-  
-  // NOUVEAU : Bouton pour créer un nouveau foyer
-  h += '<div class="card"><b>Nouveau foyer</b><p class="mut" style="margin:4px 0 8px">Dissocier cet appareil et créer un tout nouveau foyer indépendant.</p><button class="btn" style="background:var(--bad);border-color:var(--bad)" data-a="new-foyer">Créer un nouveau foyer</button></div>';
-
-  h += '<div class="card"><b>Rappels dans votre agenda</b>...';
-  // (Le reste de la fonction ne change pas)
-  var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre famille et ouvrez-le sur l’écran du frigo : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
   h += '<div class="card"><b>Rappels dans votre agenda</b><p class="mut" style="margin:4px 0 8px">Téléchargez un fichier à ouvrir avec l’agenda de votre téléphone : les tâches y apparaissent avec une alarme. L’agenda ne se met pas à jour tout seul, refaites l’export après des changements importants.</p><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
   h += '<div class="card"><b>Membres de la famille</b><p class="mut" style="margin:4px 0 8px">Prénom et capacité : le nombre de points de charge qu’une personne peut porter par semaine (25 pour un adulte, 10 pour un enfant).</p>';
   S.members.forEach(function(m) {
@@ -742,18 +735,6 @@ document.addEventListener("click", function(e) {
   var el = e.target.closest("[data-a]"); if (!el) return;
   var a = el.dataset.a, id = el.dataset.id, t;
   if (a === "tab") V = el.dataset.v;
-  else if (a === "new-foyer") {
-    if (window.confirm("Voulez-vous vraiment créer un nouveau foyer ? Cela va réinitialiser les données sur cet appareil et générer une nouvelle adresse unique.")) {
-      try {
-        localStorage.removeItem("copilote-foyer-id");
-        // Nettoie aussi le stockage local de l'ancien foyer
-        localStorage.removeItem(K);
-      } catch(e) {}
-      // Recharge la page pour générer un nouvel ID de foyer propre
-      location.href = location.pathname;
-    }
-    return;
-  }
   else if (a === "per") P = el.dataset.v;
   else if (a === "cp") {
     var u = location.href;
