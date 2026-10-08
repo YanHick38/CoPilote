@@ -135,23 +135,12 @@ if ("serviceWorker" in navigator) {
 }
 
 // Clé OpenRouter
-function getKey() { try { return sessionStorage.getItem("copilote-openrouter-key") || localStorage.getItem("copilote-openrouter-key") || ""; } catch(e) { return ""; } }
+function getKey() { try { return localStorage.getItem("copilote-openrouter-key") || ""; } catch(e) { return ""; } }
 function askKey() {
-  var k = (window.prompt("Collez votre clé OpenRouter :", "") || "").trim();
-  if (!k) return "";
-  if (k.indexOf("sk-or-") !== 0) { alert("Cette clé ne ressemble pas à une clé OpenRouter (elle commence par sk-or-)."); return ""; }
-  var mem = window.confirm("Mémoriser la clé sur cet appareil ?\nOK : oui\nAnnuler : seulement pour cette session");
-  try { (mem ? localStorage : sessionStorage).setItem("copilote-openrouter-key", k); } catch(e) {}
-  return k;
-}
-function forgetKey() { try { localStorage.removeItem("copilote-openrouter-key"); sessionStorage.removeItem("copilote-openrouter-key"); } catch(e) {} }
-
-var AI_DEFAULT = getModel(); // à vérifier sur openrouter.ai/models
-function getModel() { try { return localStorage.getItem("copilote-ai-model") || AI_DEFAULT; } catch(e) { return AI_DEFAULT; } }
-function askModel() {
-  var m = (window.prompt("Identifiant d'un modèle OpenRouter qui accepte les images :", getModel()) || "").trim();
-  if (m && /^[\w.\-]+\/[\w.:\-]+$/.test(m)) { try { localStorage.setItem("copilote-ai-model", m); } catch(e) {} return true; }
-  return false;
+  var k = (window.prompt("Collez votre clé OpenRouter (elle reste uniquement sur cet appareil) :", "") || "").trim();
+  if (k && k.indexOf("sk-or-") === 0) { try { localStorage.setItem("copilote-openrouter-key", k); } catch(e) {} return k; }
+  if (k) alert("Cette clé ne ressemble pas à une clé OpenRouter (elle commence par sk-or-).");
+  return "";
 }
 
 const firebaseConfig = {
@@ -187,42 +176,7 @@ function getFoyerId() {
 }
 
 var FID = getFoyerId(), K = "copilote-v2-" + FID;
-var SAFE_ID = /^[\w-]{1,64}$/, ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
-function hasF(k) { return Object.prototype.hasOwnProperty.call(F, k); }
-
-// Écarte tout ce qui vient de la base et n'a pas la forme attendue
-function sanitize(x) {
-  var ok = function(e) { return e && SAFE_ID.test(e.id); };
-  x.members = x.members.filter(ok);
-  x.tasks = x.tasks.filter(function(t) { return ok(t) && hasF(t.freq); });
-  x.vault = (x.vault || []).filter(ok);
-  x.folders = (x.folders || []).filter(ok);
-  x.members.forEach(function(m) { m.cap = Math.min(100, Math.max(1, Math.round(+m.cap) || 25)); });
-  x.tasks.forEach(function(t) {
-    t.w = Math.min(5, Math.max(1, Math.round(+t.w) || 1));
-    if (t.who !== "tour" && !SAFE_ID.test(t.who)) t.who = "tour";
-    if (!ISO_RE.test(t.due || "")) t.due = "";
-    if (t.doneOn && !ISO_RE.test(t.doneOn)) delete t.doneOn;
-  });
-  return x;
-}
-
-// Date sans débordement : le 31 en avril devient le 30, le 29 février devient le 28
-function mkDate(y, m, d) { var last = new Date(y, m + 1, 0).getDate(); return new Date(y, m, Math.min(d, last)); }
-
-// Tâche annuelle faite et échéance passée : on reconduit à l'année suivante et on la rouvre
-function rollDues() {
-  var today = sod(new Date()), ch = [];
-  S.tasks.forEach(function(t) {
-    if (t.freq !== "annuel" || !t.done || !t.due) return;
-    var d = parse(t.due);
-    if (d >= today) return;
-    while (d < today) d = mkDate(d.getFullYear() + 1, d.getMonth(), d.getDate());
-    t.due = iso(d); t.done = false; ch.push(t);
-  });
-  ch.forEach(function(t) { wT(t); });
-  return ch.length > 0;
-}
+var F = { quotidien: 5, hebdo: 1, mensuel: 0.5, annuel: 0.25, ponctuel: 0.25 }, CAP = 25;
 var uid = function() { return Math.random().toString(36).slice(2, 8); };
 
 var D = [
@@ -271,7 +225,7 @@ function norm(x) {
   delete x.apiKey;
   if (!x.folders || !x.folders.length) x.folders = defaultFolders();
   x.members.forEach(function(m) { if (!m.cap) m.cap = /enfant/i.test(m.name) ? 10 : 25; });
-  return sanitize(x);
+  return x;
 }
 
 var S; try { S = JSON.parse(localStorage.getItem(K)); } catch(e) {}
@@ -322,7 +276,7 @@ if (db) {
     var v = s.val();
     if (!v || !v.meta) { ref().set(toDB(S)).catch(fail); return; }
     if (v.apiKey !== undefined) ref("apiKey").remove().catch(function() {});
-    err = ""; S = fromDB(v); keep(); rollDues();
+    err = ""; S = fromDB(v); keep();
     if (!v.folders) S.folders.forEach(function(f) { wF(f); });
     refresh();
   }, fail);
@@ -361,7 +315,7 @@ function items(p) {
     if (t.freq === "quotidien" || t.freq === "hebdo") { out.push({ t: t, k: "rec" }); return; }
     if (!t.due) { if (p === "mois") out.push({ t: t, k: "nodate" }); return; }
     var d = parse(t.due);
-    if (t.freq === "mensuel") { var n = sod(new Date()); d = d = mkDate(n.getFullYear(), n.getMonth(), d.getDate()); }
+    if (t.freq === "mensuel") { var n = sod(new Date()); d = new Date(n.getFullYear(), n.getMonth(), d.getDate()); }
     if (d < today && !isDone(t)) { out.push({ t: t, k: "late", d: d }); return; }
     if (d >= r[0] && d <= r[1]) out.push({ t: t, k: "due", d: d });
   });
@@ -397,7 +351,7 @@ function ring(p, sz) {
   return '<svg viewBox="0 0 100 100" width="' + sz + '" height="' + sz + '" role="img"><circle cx="50" cy="50" r="38" fill="none" stroke="var(--line)" stroke-width="10"/><circle cx="50" cy="50" r="38" fill="none" pathLength="100" stroke-width="10" stroke-linecap="round" stroke-dasharray="' + p + ' 100" transform="rotate(-90 50 50)" style="stroke:' + col(p) + '"/><text x="50" y="57" text-anchor="middle" font-size="' + (p >= 100 ? 17 : 22) + '" font-weight="700" fill="var(--ink)">' + p + '%</text></svg>';
 }
 
-function opt(v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + '>' + l + '</option>'; }
+function opt(v, l, cur) { return '<option value="' + v + '"' + (v === cur ? " selected" : "") + '>' + l + '</option>'; }
 function whoSel(t) { return opt("tour", "À tour de rôle", t.who) + S.members.map(function(m) { return opt(m.id, esc(m.name), t.who); }).join(""); }
 function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
 
@@ -493,7 +447,7 @@ function vTb() {
 function vTach() {
   var h = '<div class="card"><div class="add"><div style="display:flex;gap:6px;grid-column:1/-1"><input id="nn" placeholder="Nouvelle tâche" style="flex:1"><button class="btn btn-scan" onclick="document.getElementById(\'aiFile\').click()" title="Scanner un document avec la caméra">📷 Scanner</button></div><input type="file" id="aiFile" accept="image/*" capture="environment" style="display:none" onchange="processAIPhoto(this)"><select id="nf" data-c="np">' + Object.keys(F).map(function(k) { return opt(k, k, "hebdo"); }).join("") + '</select><select id="nw" data-c="np">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, "2"); }).join("") + '</select><select id="nq" style="grid-column:1/-1"><option value="sug">' + esc(sugLabel(sugFor(2, "hebdo"))) + '</option><option value="tour">À tour de rôle</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance (facultative) <input id="nd" type="date"></label><button class="btn" data-a="addt" style="grid-column:1/-1">Ajouter la tâche</button></div><div id="aiLoader" class="ai-loader"><div class="spinner"></div><span>Analyse rapide par l’IA...</span></div></div><div class="card">';
   S.tasks.forEach(function(t) {
-    h += '<div class="ed"><input data-c="tn" data-id="' + t.id + '" value="' + esc(t.name) + '"><select data-c="tf" data-id="' + t.id + '">' + Object.keys(F).map(function(k) { return opt(k, k, t.freq); }).join("") + '</select><select data-c="tw" data-id="' + t.id + '">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, String(t.w)); }).join("") + '</select><select data-c="tq" data-id="' + t.id + '">' + whoSel(t) + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance <input type="date" data-c="td" data-id="' + t.id + '" value="' + esc(t.due || "") + '"></label><div style="grid-column:1/-1;display:flex;justify-content:space-between"><button class="lk" style="color:var(--acc)" data-a="ict" data-id="' + t.id + '">📅 Ajouter à l’agenda</button><button class="lk" data-a="dt" data-id="' + t.id + '">Supprimer</button></div></div>';
+    h += '<div class="ed"><input data-c="tn" data-id="' + t.id + '" value="' + esc(t.name) + '"><select data-c="tf" data-id="' + t.id + '">' + Object.keys(F).map(function(k) { return opt(k, k, t.freq); }).join("") + '</select><select data-c="tw" data-id="' + t.id + '">' + [1,2,3,4,5].map(function(i) { return opt(String(i), "Poids " + i, String(t.w)); }).join("") + '</select><select data-c="tq" data-id="' + t.id + '">' + whoSel(t) + '</select><label style="grid-column:1/-1;font-size:12px;color:var(--mut)">Échéance <input type="date" data-c="td" data-id="' + t.id + '" value="' + (t.due || "") + '"></label><div style="grid-column:1/-1;display:flex;justify-content:space-between"><button class="lk" style="color:var(--acc)" data-a="ict" data-id="' + t.id + '">📅 Ajouter à l’agenda</button><button class="lk" data-a="dt" data-id="' + t.id + '">Supprimer</button></div></div>';
   });
   return h + '</div>';
 }
@@ -570,7 +524,6 @@ function vFam() {
     h += '<div class="row"><input data-c="mn" data-id="' + m.id + '" value="' + esc(m.name) + '" style="flex:1;min-width:0"><input data-c="mc" data-id="' + m.id + '" type="number" min="1" max="100" value="' + cap(m) + '" style="width:64px;flex:none" aria-label="Capacité de ' + esc(m.name) + '"><button class="lk" data-a="dm" data-id="' + m.id + '">Supprimer</button></div>';
   });
   h += '</div><div class="card"><div class="row" style="border:0"><input id="nm" placeholder="Prénom du nouveau membre" style="flex:1;min-width:0"><select id="nmc" style="flex:none"><option value="25">Adulte</option><option value="10">Enfant</option></select><button class="btn" data-a="am">Ajouter</button></div></div>';
-  h += '<div class="card"><b>IA (scan de documents)</b><p class="mut" style="margin:4px 0 8px">Clé et modèle OpenRouter utilisés pour lire les photos.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="seg" style="flex:none;padding:9px 14px" data-a="fm">Changer le modèle</button><button class="seg" style="flex:none;padding:9px 14px" data-a="fk">Oublier la clé</button></div></div>';
   return h;
 }
 
@@ -604,7 +557,7 @@ function processAIPhoto(input) {
   if (!input.files || !input.files[0]) return;
   var seen = false; try { seen = localStorage.getItem("copilote-ai-ok") === "1"; } catch(e) {}
   if (!seen) {
-    if (!window.confirm("La photo sera envoyée à un service d'IA externe (OpenRouter) pour être lue. Continuer ?")) { input.value = ""; return; }
+    if (!window.confirm("La photo sera envoyée à l'IA pour être lue. Continuer ?")) { input.value = ""; return; }
     try { localStorage.setItem("copilote-ai-ok", "1"); } catch(e) {}
   }
   var apiKey = getKey() || askKey();
@@ -616,26 +569,30 @@ function processAIPhoto(input) {
   var file = input.files[0];
   input.value = "";
   
-  // Compression à 700px pour garder un envoi rapide et éviter le failed-to-fetch
-  compressImage(file, 700, 0.6, function(dataUrl) {
-    var prompt = "Analyse ce document et génère UNE SEULE tâche claire et synthétique sous la forme d'une action directe (ex: 'Payer [Nom]', 'Signer [Nom]', 'Faire [Sujet]') avec sa date limite si présente. " +
-                 "Renvoie UNIQUEMENT un JSON strict au format : " +
-                 "{\"tasks\": [{\"name\": \"Action et Nom court\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
+  compressImage(file, 800, 0.65, function(dataUrl) {
+    var prompt = "Analyse ce document. Renvoie UNIQUEMENT un objet JSON strict avec cette structure exacte : " +
+                 "{\"tasks\": [{\"name\": \"Action courte\", \"due\": \"YYYY-MM-DD ou vide\", \"weight\": 2}]}";
 
     fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      headers: { 
+        "Content-Type": "application/json", 
+        "Authorization": "Bearer " + apiKey,
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "CoPilote"
+      },
       body: JSON.stringify({
-        model: "openrouter/free",
+        model: "google/gemini-flash-1.5:free",
         messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } }] }],
         temperature: 0.1
       })
     })
-    .then(function(res) { return res.json().then(function(data) { if (!res.ok) throw new Error(data.error?.message || "Erreur HTTP"); return data; }); })
+    .then(function(res) { return res.json().then(function(data) { if (!res.ok) throw new Error(data.error?.message || "Erreur HTTP " + res.status); return data; }); })
     .then(function(data) {
       if (loader) loader.style.display = "none";
       try {
-        var res = JSON.parse(data.choices[0].message.content.replace(/```json|```/g, "").trim());
+        var raw = data.choices[0].message.content.replace(/```json|```/g, "").trim();
+        var res = JSON.parse(raw);
         var taskList = res.tasks || [res];
         if (taskList.length > 0) {
           var newTask = aiTask(taskList[0]);
@@ -644,13 +601,12 @@ function processAIPhoto(input) {
           alert("✨ Tâche extraite :\n• " + newTask.name + (newTask.due ? " (" + fmtFR(newTask.due) + ")" : ""));
           render();
         } else {
-          alert("Aucune tâche trouvée sur ce document.");
+          alert("Aucune tâche trouvée.");
         }
       } catch(e) { alert("L'analyse a échoué."); }
     })
     .catch(function(err) {
       if (loader) loader.style.display = "none";
-        if (/model|endpoint|not found/i.test(err.message) && window.confirm("Le modèle IA semble indisponible. En choisir un autre ?")) askModel();
       alert("Erreur de connexion :\n" + err.message);
     });
   });
@@ -693,7 +649,7 @@ function ics(sel, onlyId) {
     }
     if (!t.due) return;
     var d = parse(t.due);
-    if (t.freq === "mensuel") {   var x = mkDate(today.getFullYear(), today.getMonth(), d.getDate()); if (x < today) x = mkDate(today.getFullYear(), today.getMonth() + 1, d.getDate()); d = x; }
+    if (t.freq === "mensuel") { var x = new Date(today.getFullYear(), today.getMonth(), d.getDate()); if (x < today) x = new Date(today.getFullYear(), today.getMonth() + 1, d.getDate()); d = x; }
     else if (t.freq === "annuel") { while (d < today) d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate()); }
     else if (d < today) return;
     ev(t.id, t, who(t, d), d, t.freq === "mensuel" ? "FREQ=MONTHLY" : t.freq === "annuel" ? "FREQ=YEARLY" : "", t.freq === "annuel" ? ["-P13DT15H", "-PT15H"] : ["-PT15H"]);
@@ -771,8 +727,6 @@ document.addEventListener("click", function(e) {
     if (!r1.n) { alert("Cette tâche n'a pas d'échéance."); return; }
     var tk = T(id); saveIcs(r1.text, "tache-" + slug(tk ? tk.name : "") + ".ics"); return;
   }
-  else if (a === "fk") { forgetKey(); el.textContent = "Clé effacée"; return; }
-else if (a === "fm") { askModel(); return; }
   else if (a === "snap") { shotCat = id; document.getElementById("docFile").click(); return; }
   else if (a === "od") { var fo = (S.folders || []).filter(function(x) { return x.id === id; })[0]; if (fo && driveOk(fo.link)) window.open(fo.link, "_blank", "noopener"); return; }
   else if (a === "ld") {
@@ -835,11 +789,7 @@ document.addEventListener("change", function(e) {
   wT(t);
 });
 
-  setInterval(function() {
-    if (document.getElementById("frigoView").style.display === "block") updateFrigo();
-    if ((!db || online) && rollDues()) refresh();
-  }, 30000);
-  if (!db) rollDues();
+setInterval(function() { if (document.getElementById("frigoView").style.display === "block") updateFrigo(); }, 30000);
 render();
 </script>
 </body>
