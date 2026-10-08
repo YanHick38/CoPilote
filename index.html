@@ -60,7 +60,6 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 .ai-loader{display:none;align-items:center;gap:8px;font-size:13px;color:#6366F1;font-weight:600;margin-top:10px}
 .spinner{width:16px;height:16px;border:2px solid #6366F1;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* Style des badges et confettis */
 .badge-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .badge-tag { font-size: 11px; background: var(--soft); color: var(--acc); padding: 2px 6px; border-radius: 6px; font-weight: 600; }
 .confetti { position: fixed; width: 10px; height: 10px; background-color: #f00; z-index: 9999; animation: fall 1s ease-out forwards; }
@@ -96,6 +95,7 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 
 <main id="app"></main>
 <input type="file" id="docFile" accept="image/*" capture="environment" style="display:none" onchange="onDocPhoto(this)">
+<input type="file" id="barcodeFile" accept="image/*" capture="environment" style="display:none" onchange="onBarcodeScan(this)">
 
 <div id="frigoView" class="fr-overlay" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -223,7 +223,9 @@ function init() {
       return { id: uid(), name: d[0], w: d[1], freq: d[2], who: d[3], done: false, due: DU[d[0]] !== undefined ? plus(DU[d[0]]) : "", o: i, c: i };
     }),
     vault: [],
-    folders: defaultFolders()
+    folders: defaultFolders(),
+    shop: [],
+    stock: []
   };
 }
 
@@ -233,6 +235,8 @@ function norm(x) {
   x.tasks.forEach(function(t, i) { if (t.o === undefined) t.o = i; if (t.c === undefined) t.c = i; if (t.due === undefined) t.due = ""; if (t.who === undefined) t.who = "none"; });
   if (!x.vault) x.vault = [];
   if (!x.log) x.log = [];
+  if (!x.shop) x.shop = [];
+  if (!x.stock) x.stock = [];
   delete x.apiKey;
   if (!x.folders || !x.folders.length) x.folders = defaultFolders();
   x.members.forEach(function(m) { if (!m.cap) m.cap = /enfant/i.test(m.name) ? 10 : 25; });
@@ -258,14 +262,20 @@ function wF(f) { keep(); if (db) ref("folders/" + f.id).set(clean(f)).catch(fail
 function dF(id) { keep(); if (db) ref("folders/" + id).remove().catch(fail); }
 function wLg(e) { keep(); if (db) ref("log/" + e.id).set(clean(e)).catch(fail); }
 function dLg(id) { keep(); if (db) ref("log/" + id).remove().catch(fail); }
+function wShop(item) { keep(); if (db) ref("shop/" + item.id).set(clean(item)).catch(fail); }
+function dShop(id) { keep(); if (db) ref("shop/" + id).remove().catch(fail); }
+function wStock(item) { keep(); if (db) ref("stock/" + item.id).set(clean(item)).catch(fail); }
+function dStock(id) { keep(); if (db) ref("stock/" + id).remove().catch(fail); }
 
 function toDB(x) {
-  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, folders: {}, log: {} };
+  var o = { meta: { v: 2 }, members: {}, tasks: {}, vault: {}, folders: {}, log: {}, shop: {}, stock: {} };
   x.members.forEach(function(m) { o.members[m.id] = clean(m); });
   x.tasks.forEach(function(t) { o.tasks[t.id] = clean(t); });
   (x.vault || []).forEach(function(v) { o.vault[v.id] = clean(v); });
   (x.log || []).forEach(function(e) { o.log[e.id] = clean(e); });
   (x.folders || []).forEach(function(f) { o.folders[f.id] = clean(f); });
+  (x.shop || []).forEach(function(s) { o.shop[s.id] = clean(s); });
+  (x.stock || []).forEach(function(st) { o.stock[st.id] = clean(st); });
   return o;
 }
 
@@ -273,7 +283,7 @@ function fromDB(v) {
   function arr(o) {
     return Object.keys(o || {}).map(function(k) { var e = o[k]; if (!e.id) e.id = k; return e; }).sort(function(a, b) { return (a.o || 0) - (b.o || 0); });
   }
-  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), folders: arr(v.folders), log: arr(v.log) });
+  return norm({ members: arr(v.members), tasks: arr(v.tasks), vault: arr(v.vault), folders: arr(v.folders), log: arr(v.log), shop: arr(v.shop), stock: arr(v.stock) });
 }
 
 function editing() {
@@ -422,12 +432,12 @@ function urg(x) {
 var OR = { late: 0, due: 1, rec: 2, nodate: 3 };
 function byUrg(a, b) { return OR[a.k] - OR[b.k] || (a.d && b.d ? a.d - b.d : 0); }
 
-function mpts(m) { var s = 0; S.tasks.forEach(function(t) { var a = who(t); if (a && a.id === (m.id || m)) s += t.w * F[t.freq]; }); return s; }
+function mpts_calc(m) { var s = 0; S.tasks.forEach(function(t) { var a = who(t); if (a && a.id === (m.id || m)) s += t.w * F[t.freq]; }); return s; }
 function cap(m) { return m.cap || CAP; }
 function pc(r) { return Math.round(r * 100); }
 function sugFor(w, fq) {
   var p = w * F[fq], best = null;
-  S.members.forEach(function(m) { var b = mpts(m), r = (b + p) / cap(m); if (!best || r < best.r) best = { m: m, r: r, b: pc(b / cap(m)), a: pc(r) }; });
+  S.members.forEach(function(m) { var b = mpts_calc(m), r = (b + p) / cap(m); if (!best || r < best.r) best = { m: m, r: r, b: pc(b / cap(m)), a: pc(r) }; });
   return best;
 }
 function sugLabel(s) { return s ? "Proposé : " + s.m.name + " (" + s.b + " % → " + s.a + " %)" : "À tour de rôle"; }
@@ -438,7 +448,7 @@ function updSug() {
 var skip = {};
 function rebal() {
   var M = S.members; if (M.length < 2) return null;
-  var rs = M.map(function(m) { var p = mpts(m); return { m: m, p: p, c: cap(m), r: p / cap(m) }; });
+  var rs = M.map(function(m) { var p = mpts_calc(m); return { m: m, p: p, c: cap(m), r: p / cap(m) }; });
   var hi = rs.slice().sort(function(a, b) { return b.r - a.r; })[0], lo = rs.slice().sort(function(a, b) { return a.r - b.r; })[0];
   if (hi.m.id === lo.m.id || hi.r < 0.8 || hi.r - lo.r < 0.2) return null;
   var best = null;
@@ -519,6 +529,27 @@ function vTach() {
   return h + '</div>';
 }
 
+function vShop() {
+  var h = '<div class="card"><b>🛒 Liste de Courses</b><div class="add" style="margin-top:8px"><input id="shopName" placeholder="Article à ajouter (ex: Lait, Œufs...)" style="flex:1"><button class="btn" data-a="addShop">Ajouter</button></div></div>';
+  
+  h += '<div class="card"><b>Articles à acheter</b>';
+  if (!S.shop.length) h += '<p class="mut" style="margin-top:8px">La liste de courses est vide.</p>';
+  S.shop.forEach(function(item) {
+    h += '<div class="row"><button class="chk' + (item.done ? " d" : "") + '" data-a="chkShop" data-id="' + item.id + '">' + (item.done ? "✓" : "") + '</button><div class="t"><p' + (item.done ? ' style="text-decoration:line-through;color:var(--mut)"' : '') + '>' + esc(item.name) + '</p></div><button class="lk" data-a="toStock" data-id="' + item.id + '" title="Transférer vers l’inventaire">📦 Stock</button><button class="lk" data-a="delShop" data-id="' + item.id + '">✕</button></div>';
+  });
+  h += '</div>';
+
+  h += '<div class="card"><b>📦 Inventaire & Scan Code-Barres</b><div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-scan" onclick="document.getElementById(\'barcodeFile\').click()">📷 Scanner un code-barres</button></div><div class="add" style="margin-top:8px"><input id="stockName" placeholder="Nom du produit en stock"><input id="stockQty" placeholder="Quantité (ex: 2)" type="number" value="1"><button class="btn" data-a="addStock" style="grid-column:1/-1">Ajouter manuellement</button></div></div>';
+
+  h += '<div class="card"><b>Produits en stock</b>';
+  if (!S.stock.length) h += '<p class="mut" style="margin-top:8px">Aucun produit dans l’inventaire.</p>';
+  S.stock.forEach(function(st) {
+    h += '<div class="row"><div class="t"><p>' + esc(st.name) + '</p><small>Quantité : <b>' + st.qty + '</b> ' + (st.code ? '· Code : ' + st.code : '') + '</small></div><button class="seg" style="flex:none;padding:4px 8px;font-size:12px" data-a="toShop" data-id="' + st.id + '">Racheter</button><button class="lk" data-a="delStock" data-id="' + st.id + '">Supprimer</button></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
 function triggerConfetti(e) {
   var rect = e.target.getBoundingClientRect();
   var x = rect.left + rect.width / 2;
@@ -566,6 +597,61 @@ function onDocPhoto(input) {
     V = "vault"; render();
   });
 }
+
+function onBarcodeScan(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0]; input.value = "";
+  if (!("BarcodeDetector" in window)) {
+    alert("Le scan de code-barres natif n'est pas supporté par ce navigateur (essayez sur Chrome Mobile). Ajout manuel recommandé.");
+    var name = window.prompt("Nom du produit scanné :", "Produit");
+    if (name) {
+      var st = { id: uid(), name: name.trim(), qty: 1, code: "" };
+      S.stock.push(st); wStock(st); render();
+    }
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code"] });
+      detector.detect(img).then(function(codes) {
+        if (codes.length === 0) {
+          alert("Aucun code-barres détecté. Essayez de mieux cadrer.");
+          return;
+        }
+        var codeVal = codes[0].rawValue;
+        // Recherche du nom via Open Food Facts API (gratuit et universel)
+        fetch("https://world.openfoodfacts.org/api/v0/product/" + codeVal + ".json")
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            var prodName = (data.product && (data.product.product_name || data.product.brands)) || ("Produit " + codeVal);
+            var existing = S.stock.filter(function(s) { return s.code === codeVal; })[0];
+            if (existing) {
+              existing.qty++;
+              wStock(existing);
+            } else {
+              var st = { id: uid(), name: prodName, qty: 1, code: codeVal };
+              S.stock.push(st);
+              wStock(st);
+            }
+            render();
+            alert("Produit ajouté à l'inventaire : " + prodName);
+          })
+          .catch(function() {
+            var st = { id: uid(), name: "Produit " + codeVal, qty: 1, code: codeVal };
+            S.stock.push(st); wStock(st); render();
+            alert("Code scanné : " + codeVal);
+          });
+      }).catch(function(err) {
+        alert("Erreur lors de la lecture du code-barres.");
+      });
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function downloadShot() {
   if (!shot) return;
   var a = document.createElement("a"); a.href = shot.url; a.download = shotFileName();
@@ -675,10 +761,10 @@ function vFam() {
 }
 
 function render() {
-  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
-  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
+  var T = [["tb", "Tableau"], ["tach", "Tâches"], ["shop", "🛒 Courses"], ["bil", "Bilan"], ["vault", "Santé/Maison"], ["fam", "Famille"]];
+  var b = V === "tb" ? vTb() : V === "tach" ? vTach() : V === "shop" ? vShop() : V === "bil" ? vBil() : V === "vault" ? vVault() : vFam();
   var st = !db ? ["var(--warn)", "Mode local"] : err ? ["var(--bad)", "Erreur synchro"] : online ? ["var(--ok)", "Synchronisé"] : ["var(--warn)", "Hors ligne"];
-  var banner = '<div class="sync-banner"><span><b>CoPilote AI 🎮</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
+  var banner = '<div class="sync-banner"><span><b>CoPilote AI 🛒</b></span><span><i class="dot" style="background:' + st[0] + '"></i>' + st[1] + '</span></div>';
   document.getElementById("app").innerHTML = banner + '<nav>' + T.map(function(x) { return '<button class="' + (V === x[0] ? "on" : "") + '" data-a="tab" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join("") + '</nav>' + b;
 }
 
@@ -890,6 +976,56 @@ document.addEventListener("click", function(e) {
   else if (a === "dt") { S.tasks = S.tasks.filter(function(x) { return x.id !== id; }); dT(id); }
   else if (a === "dm") { S.members = S.members.filter(function(x) { return x.id !== id; }); dM(id); }
   else if (a === "dv") { S.vault = S.vault.filter(function(x) { return x.id !== id; }); dV(id); }
+  else if (a === "addShop") {
+    var nameInput = document.getElementById("shopName");
+    var name = nameInput.value.trim();
+    if (name) {
+      var item = { id: uid(), name: name, done: false };
+      S.shop.push(item); wShop(item);
+      nameInput.value = "";
+    }
+  }
+  else if (a === "chkShop") {
+    var si = S.shop.filter(function(x) { return x.id === id; })[0];
+    if (si) { si.done = !si.done; wShop(si); }
+  }
+  else if (a === "delShop") {
+    S.shop = S.shop.filter(function(x) { return x.id !== id; });
+    dShop(id);
+  }
+  else if (a === "toStock") {
+    var si = S.shop.filter(function(x) { return x.id === id; })[0];
+    if (si) {
+      S.shop = S.shop.filter(function(x) { return x.id !== id; });
+      dShop(id);
+      var st = { id: uid(), name: si.name, qty: 1, code: "" };
+      S.stock.push(st); wStock(st);
+    }
+  }
+  else if (a === "addStock") {
+    var nameInput = document.getElementById("stockName");
+    var qtyInput = document.getElementById("stockQty");
+    var name = nameInput.value.trim();
+    var qty = parseInt(qtyInput.value) || 1;
+    if (name) {
+      var st = { id: uid(), name: name, qty: qty, code: "" };
+      S.stock.push(st); wStock(st);
+      nameInput.value = "";
+    }
+  }
+  else if (a === "toShop") {
+    var st = S.stock.filter(function(x) { return x.id === id; })[0];
+    if (st) {
+      S.stock = S.stock.filter(function(x) { return x.id !== id; });
+      dStock(id);
+      var item = { id: uid(), name: st.name, done: false };
+      S.shop.push(item); wShop(item);
+    }
+  }
+  else if (a === "delStock") {
+    S.stock = S.stock.filter(function(x) { return x.id !== id; });
+    dStock(id);
+  }
   else if (a === "addt") {
     var n = document.getElementById("nn").value.trim(); if (!n) return;
     var wv = +document.getElementById("nw").value, fv = document.getElementById("nf").value, q = document.getElementById("nq").value || "none", sg = q === "sug" ? sugFor(wv, fv) : null;
@@ -918,7 +1054,7 @@ document.addEventListener("change", function(e) {
   if (c === "tn") { if (v.trim()) t.name = v.trim(); }
   else if (c === "tf") t.freq = v;
   else if (c === "tw") t.w = +v;
-  else if (c === "tq") t.who = v;
+  header: else if (c === "tq") t.who = v;
   else if (c === "td") t.due = v;
   wT(t);
 });
