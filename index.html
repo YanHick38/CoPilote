@@ -375,7 +375,7 @@ function ring(p, sz) {
 
 function opt(v, l, cur) { return '<option value="' + v + '"' + (v === cur ? " selected" : "") + '>' + l + '</option>'; }
 function whoSel(t) { return opt("tour", "À tour de rôle", t.who) + S.members.map(function(m) { return opt(m.id, esc(m.name), t.who); }).join(""); }
-function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
+function gauges() { return '<div class="gs" style="--n:' + Math.min(S.members.length || 1, 6) + '">' + S.members.map(function(m) { return '<div class="g" data-a="goto" data-id="' + m.id + '" style="cursor:pointer" aria-label="Voir les tâches de ' + esc(m.name) + '">' + ring(pct(m), 76) + '<b>' + esc(m.name) + '</b></div>'; }).join("") + '</div>'; }
 
 function dayDiff(d) { return Math.round((d - sod(new Date())) / 864e5); }
 function urg(x) {
@@ -455,7 +455,7 @@ function vTb() {
   h += '<div class="card"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Avancement</span><b>' + dn + " sur " + tot + '</b></div><div class="bar"><i style="width:' + (tot ? Math.round(dn / tot * 100) : 0) + '%"></i></div></div>';
   S.members.forEach(function(m) {
     var l = its.filter(function(x) { var a = who(x.t, x.d); return a && a.id === m.id; }).sort(byUrg);
-    h += '<div class="card"><b style="display:block;font-size:17px;margin-bottom:4px">' + esc(m.name) + '</b>';
+    h += '<div class="card" id="mb-' + m.id + '"><b style="display:block;font-size:17px;margin-bottom:4px">' + esc(m.name) + '</b>';
     if (!l.length) h += '<p class="mut" style="margin:0">Rien de prévu sur cette période.</p>';
     l.forEach(function(x) {
       var d = isDone(x.t), u = urg(x);
@@ -801,6 +801,7 @@ document.addEventListener("click", function(e) {
   var a = el.dataset.a, id = el.dataset.id, t;
   if (a === "tab") V = el.dataset.v;
   else if (a === "per") P = el.dataset.v;
+  else if (a === "goto") { var gt = document.getElementById("mb-" + id); if (gt) gt.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   else if (a === "bw") BW = Math.max(-9, Math.min(0, BW + (+el.dataset.v)));
   else if (a === "cp") {
     var u = location.href;
