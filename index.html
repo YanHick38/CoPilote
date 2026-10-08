@@ -194,30 +194,6 @@ var FID = getFoyerId(), K = "copilote-v2-" + FID;
 var F = { quotidien: 5, hebdo: 1, mensuel: 0.5, annuel: 0.25, ponctuel: 0.25 }, CAP = 25;
 var uid = function() { return Math.random().toString(36).slice(2, 8); };
 
-// === COLLEZ LE SCRIPT DE LA PHASE 1 ICI ===
-function generateShortCode() {
-  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  var s = "";
-  for (var i = 0; i < 8; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
-  return s;
-}
-
-var SC_KEY = "copilote-short-code-" + FID;
-var myShortCode = localStorage.getItem(SC_KEY);
-
-if (!myShortCode) {
-  myShortCode = generateShortCode();
-  try { localStorage.setItem(SC_KEY, myShortCode); } catch(e) {}
-  if (db) {
-    db.ref("codes/" + myShortCode).set(FID);
-  }
-}
-// ===========================================
-
-var D = [
-  ["Repas du soir", 3, "quotidien", "tour"],
-  // ... le reste de votre code continue ici ...
-
 var D = [
   ["Repas du soir", 3, "quotidien", "tour"],
   ["Vider le lave-vaisselle", 1, "quotidien", "tour"],
@@ -625,16 +601,9 @@ function vBil() {
 }
 
 function vFam() {
-  var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce code ou ce lien avec votre famille : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
-  
-  // Carte affichant le code court du foyer actuel
-  h += '<div class="card"><b>Code de votre foyer</b><p class="mut" style="margin:4px 0 8px">Transmettez ce code à 8 caractères aux autres membres de votre foyer :</p><div style="font-size:22px;font-weight:800;letter-spacing:3px;color:var(--acc);padding:6px 0">' + (myShortCode || "...") + '</div></div>';
-
-  // Carte pour rejoindre un autre foyer via un code
-  h += '<div class="card"><b>Rejoindre un foyer existant</b><p class="mut" style="margin:4px 0 8px">Entrez le code à 8 caractères fourni par le créateur du foyer pour vous y connecter.</p><div class="row" style="border:0"><input id="joinCode" placeholder="Ex: K9M2X4P1" style="text-transform:uppercase;flex:1"><button class="btn" data-a="joinc">Rejoindre</button></div></div>';
-
-  h += '<div class="card"><b>Rappels dans votre agenda</b><p class="mut" style="margin:4px 0 8px">Téléchargez un fichier à ouvrir avec l’agenda de votre téléphone : les tâches y apparaissent avec une alarme.</p><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
-  h += '<div class="card"><b>Membres de la famille</b><p class="mut" style="margin:4px 0 8px">Prénom et capacité de charge hebdomadaire.</p>';
+  var h = '<div class="card"><p style="margin:0 0 8px;font-size:14px;color:var(--mut)">Partagez ce lien avec votre famille et ouvrez-le sur l’écran du frigo : tous les appareils voient les mêmes données.</p><button class="btn" data-a="cp">Copier le lien du foyer</button></div>';
+  h += '<div class="card"><b>Rappels dans votre agenda</b><p class="mut" style="margin:4px 0 8px">Téléchargez un fichier à ouvrir avec l’agenda de votre téléphone : les tâches y apparaissent avec une alarme. L’agenda ne se met pas à jour tout seul, refaites l’export après des changements importants.</p><div class="row" style="border:0"><select id="ex" style="flex:1"><option value="all">Tout le foyer</option>' + S.members.map(function(m) { return '<option value="' + m.id + '">' + esc(m.name) + '</option>'; }).join("") + '</select><button class="btn" data-a="ics">Télécharger</button></div></div>';
+  h += '<div class="card"><b>Membres de la famille</b><p class="mut" style="margin:4px 0 8px">Prénom et capacité : le nombre de points de charge qu’une personne peut porter par semaine (25 pour un adulte, 10 pour un enfant).</p>';
   S.members.forEach(function(m) {
     h += '<div class="row"><input data-c="mn" data-id="' + m.id + '" value="' + esc(m.name) + '" style="flex:1;min-width:0"><input data-c="mc" data-id="' + m.id + '" type="number" min="1" max="100" value="' + cap(m) + '" style="width:64px;flex:none" aria-label="Capacité de ' + esc(m.name) + '"><button class="lk" data-a="dm" data-id="' + m.id + '">Supprimer</button></div>';
   });
@@ -835,25 +804,6 @@ document.addEventListener("click", function(e) {
   else if (a === "per") P = el.dataset.v;
   else if (a === "goto") { var gt = document.getElementById("mb-" + id); if (gt) gt.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   else if (a === "bw") BW = Math.max(-9, Math.min(0, BW + (+el.dataset.v)));
-  else if (a === "joinc") {
-    var cInput = document.getElementById("joinCode");
-    var code = (cInput ? cInput.value : "").trim().toUpperCase();
-    if (code.length !== 8) { alert("Le code doit comporter exactement 8 caractères."); return; }
-    if (!db) { alert("La connexion Firebase est requise pour utiliser le code de foyer."); return; }
-    
-    db.ref("codes/" + code).once("value", function(snapshot) {
-      var targetFid = snapshot.val();
-      if (!targetFid) {
-        alert("Ce code de foyer est inconnu ou introuvable.");
-      } else {
-        try { localStorage.setItem("copilote-foyer-id", targetFid); } catch(e) {}
-        location.href = location.pathname + "?foyer=" + targetFid;
-      }
-    }).catch(function(err) {
-      alert("Erreur de connexion : " + err.message);
-    });
-    return;
-  }
   else if (a === "cp") {
     var u = location.href;
     (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function() { el.textContent = "Lien copié !"; }, function() { window.prompt("Copiez ce lien :", u); });
