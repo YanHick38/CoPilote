@@ -67,6 +67,8 @@ input,select{padding:8px 10px;border:1px solid var(--line);background:var(--bg);
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- AJOUTER CETTE LIGNE -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
 <body>
 
@@ -154,8 +156,21 @@ const firebaseConfig = {
 };
 
 var db = null;
+var auth = null;
+
 if (typeof firebase !== "undefined") {
-  try { firebase.initializeApp(firebaseConfig); db = firebase.database(); } catch(e) { db = null; }
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    auth = firebase.auth();
+
+    // Connexion anonyme automatique pour respecter les règles de sécurité
+    auth.signInAnonymously().catch(function(error) {
+      console.error("Erreur d'authentification anonyme :", error);
+    });
+  } catch(e) { 
+    db = null; 
+  }
 }
 
 var ID_RE = /^[A-Za-z0-9_-]{20,64}$/;
